@@ -1,0 +1,7 @@
+.arduino/
+build/
+*.bin
+*.elf
+*.map
+*.tgz
+node_modules/

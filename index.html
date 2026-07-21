@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#07111f" />
+    <title>Baechhhh｜ESP32 影片節點</title>
+    <meta
+      name="description"
+      content="由 ESP32 即時切換三個影片節點的平板控制頁面。"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ESP32 LIVE VIDEO</p>
+          <h1>三節點影片控制台</h1>
+        </div>
+        <div class="connection" aria-live="polite">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="connectionText">正在連線…</span>
+        </div>
+      </header>
+
+      <section class="stage" aria-label="目前播放影片">
+        <video
+          id="mainVideo"
+          playsinline
+          muted
+          loop
+          preload="auto"
+          aria-label="目前節點影片"
+        ></video>
+
+        <div class="idle-state" id="idleState">
+          <div class="signal-mark" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </div>
+          <p>等待 ESP32 觸發</p>
+          <span>感測器切換至節點 1、2 或 3 後，影片會自動播放</span>
+        </div>
+
+        <div class="stage-meta">
+          <div>
+            <span class="stage-label">NOW PLAYING</span>
+            <strong id="nowPlaying">尚未選擇節點</strong>
+          </div>
+          <button type="button" class="sound-button" id="soundButton">
+            開啟聲音
+          </button>
+        </div>
+      </section>
+
+      <section class="node-section" aria-labelledby="nodeHeading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">VIDEO NODES</p>
+            <h2 id="nodeHeading">選擇 Demo 節點</h2>
+          </div>
+          <p>可先用下方按鈕測試；ESP32 訊號進來時會自動覆蓋。</p>
+        </div>
+
+        <div class="node-grid">
+          <button class="node-card" type="button" data-node="1">
+            <video src="assets/videos/node-1.mp4" muted playsinline preload="metadata"></video>
+            <span class="node-number">01</span>
+            <span class="node-copy">
+              <strong>節點一</strong>
+              <small>暖色脈衝</small>
+            </span>
+          </button>
+
+          <button class="node-card" type="button" data-node="2">
+            <video src="assets/videos/node-2.mp4" muted playsinline preload="metadata"></video>
+            <span class="node-number">02</span>
+            <span class="node-copy">
+              <strong>節點二</strong>
+              <small>藍色流動</small>
+            </span>
+          </button>
+
+          <button class="node-card" type="button" data-node="3">
+            <video src="assets/videos/node-3.mp4" muted playsinline preload="metadata"></video>
+            <span class="node-number">03</span>
+            <span class="node-copy">
+              <strong>節點三</strong>
+              <small>綠色波形</small>
+            </span>
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <noscript>此頁面需要 JavaScript 才能接收 ESP32 訊號。</noscript>
+    <script src="vendor/mqtt.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
