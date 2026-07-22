@@ -1,6 +1,6 @@
 const MQTT_URL = "wss://broker.hivemq.com:8884/mqtt";
 const CONTROL_TOPIC = "axoled-student/baechhhh/20260721/video/control/v1";
-const CACHE_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const VIDEO_UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 const videos = {
@@ -24,13 +24,16 @@ function setConnection(state, label) {
 
 async function showNode(node) {
   const selected = videos[node];
-  if (!selected || currentNode === node) return;
+  if (!selected) return;
+  if (currentNode === node && !stage.classList.contains("finished")) return;
 
   clearTimeout(idleTimer);
   currentNode = node;
+  stage.classList.remove("finished");
   mainVideo.src = selected.src;
   mainVideo.load();
   stage.classList.add("has-video");
+  document.body.classList.add("video-playing");
   try {
     await mainVideo.play();
   } catch {
@@ -44,8 +47,18 @@ function showIdle() {
   mainVideo.pause();
   mainVideo.removeAttribute("src");
   mainVideo.load();
-  stage.classList.remove("has-video");
+  stage.classList.remove("has-video", "finished");
+  document.body.classList.remove("video-playing");
 }
+
+function showFinished() {
+  mainVideo.pause();
+  stage.classList.remove("has-video");
+  stage.classList.add("finished");
+  document.body.classList.remove("video-playing");
+}
+
+mainVideo.addEventListener("ended", showFinished);
 
 function handleControlMessage(rawMessage) {
   const [action, rawNode] = rawMessage.trim().toUpperCase().split("|");
@@ -105,12 +118,12 @@ async function prepareBackgroundCache() {
     const status = await askServiceWorker(worker, "VIDEO_CACHE_STATUS");
     if (!status.ready) await askServiceWorker(worker, "CACHE_VIDEOS");
 
-    const refreshVideos = () =>
-      askServiceWorker(worker, "REFRESH_VIDEOS").catch((error) =>
-        console.error("Background video refresh failed:", error),
+    const checkVideoUpdates = () =>
+      askServiceWorker(worker, "CHECK_VIDEO_UPDATES").catch((error) =>
+        console.error("Background video update check failed:", error),
       );
 
-    window.setInterval(refreshVideos, CACHE_REFRESH_INTERVAL_MS);
+    window.setInterval(checkVideoUpdates, VIDEO_UPDATE_CHECK_INTERVAL_MS);
     window.setInterval(() => registration.update(), UPDATE_CHECK_INTERVAL_MS);
   } catch (error) {
     console.error("Background cache setup failed:", error);

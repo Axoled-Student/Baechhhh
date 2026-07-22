@@ -294,6 +294,24 @@ body {
   box-shadow: 0 18px 42px rgba(40, 59, 159, 0.16);
 }
 
+.stage.has-video {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+  box-shadow: none;
+}
+
+body.video-playing {
+  overflow: hidden;
+  background: #000;
+}
+
 #mainVideo {
   position: absolute;
   inset: 0;
@@ -307,6 +325,7 @@ body {
 
 .stage.has-video #mainVideo {
   opacity: 1;
+  object-fit: contain;
 }
 
 .idle-state {
@@ -326,6 +345,64 @@ body {
 
 .stage.has-video .idle-state {
   opacity: 0;
+}
+
+.finished-state {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  padding: 30px;
+  text-align: center;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(255, 212, 92, 0.34) 0 65px, transparent 67px),
+    radial-gradient(circle at 82% 82%, rgba(91, 201, 165, 0.28) 0 95px, transparent 97px),
+    var(--paper);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+
+.stage.finished .idle-state {
+  opacity: 0;
+}
+
+.stage.finished .finished-state {
+  opacity: 1;
+}
+
+.finished-mark {
+  position: relative;
+  width: clamp(64px, 9vw, 100px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 10px 24px rgba(91, 201, 165, 0.24);
+}
+
+.finished-mark i {
+  position: absolute;
+  top: 28%;
+  left: 25%;
+  width: 48%;
+  height: 28%;
+  border-bottom: 7px solid var(--white);
+  border-left: 7px solid var(--white);
+  transform: rotate(-45deg);
+}
+
+.finished-state p {
+  margin: 18px 0 6px;
+  font-size: clamp(2rem, 5vw, 4rem);
+  font-weight: 900;
+}
+
+.finished-state span {
+  color: var(--muted);
+  font-size: clamp(0.9rem, 1.8vw, 1.2rem);
+  font-weight: 700;
 }
 
 .place-visual {

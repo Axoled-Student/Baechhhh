@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "baechhhh-video-";
-const CACHE_NAME = `${CACHE_PREFIX}2026-07-22-v3`;
+const CACHE_NAME = `${CACHE_PREFIX}2026-07-22-v4`;
 
 const APP_SHELL = [
   "./",
@@ -53,6 +53,36 @@ async function videoCacheReady() {
   return matches.every(Boolean);
 }
 
+function responseSignature(response) {
+  if (!response) return "";
+  return (
+    response.headers.get("ETag") ||
+    `${response.headers.get("Last-Modified") || ""}:${response.headers.get("Content-Length") || ""}`
+  );
+}
+
+async function checkVideoUpdates() {
+  const cache = await caches.open(CACHE_NAME);
+  let updated = 0;
+
+  for (const path of VIDEO_PATHS) {
+    const url = absoluteUrl(path);
+    const cached = await cache.match(url);
+    const liveHeaders = await fetch(url, { method: "HEAD", cache: "no-store" });
+    if (!liveHeaders.ok) continue;
+
+    if (!cached || responseSignature(cached) !== responseSignature(liveHeaders)) {
+      const freshVideo = await fetch(url, { cache: "reload" });
+      if (freshVideo.ok) {
+        await cache.put(url, freshVideo);
+        updated += 1;
+      }
+    }
+  }
+
+  return updated;
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
@@ -93,6 +123,14 @@ self.addEventListener("message", (event) => {
     event.waitUntil(
       fetchAndCacheVideos(forceRefresh)
         .then(() => reply({ ok: true, ready: true }))
+        .catch((error) => reply({ ok: false, error: error.message })),
+    );
+  }
+
+  if (event.data?.type === "CHECK_VIDEO_UPDATES") {
+    event.waitUntil(
+      checkVideoUpdates()
+        .then((updated) => reply({ ok: true, updated }))
         .catch((error) => reply({ ok: false, error: error.message })),
     );
   }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#fff8eb" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>板塊互動故事牆</title>
     <meta name="description" content="選一塊、放上去，故事就開始。" />
     <link rel="stylesheet" href="styles.css" />
@@ -69,7 +69,6 @@
           id="mainVideo"
           playsinline
           muted
-          loop
           preload="auto"
           aria-label="目前播放的故事影片"
         ></video>
@@ -84,6 +83,12 @@
             <p>把板塊放在這裡</p>
             <span>沒有播放？拿起來，再平放一次就可以囉！</span>
           </div>
+        </div>
+
+        <div class="finished-state" aria-live="polite">
+          <div class="finished-mark" aria-hidden="true"><i></i></div>
+          <p>故事看完囉！</p>
+          <span>請拿起板塊，再選一塊繼續體驗</span>
         </div>
 
         <div class="playing-badge" aria-hidden="true">
