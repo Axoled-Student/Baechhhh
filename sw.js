@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "baechhhh-video-";
-const CACHE_NAME = `${CACHE_PREFIX}2026-07-22-v2`;
+const CACHE_NAME = `${CACHE_PREFIX}2026-07-22-v3`;
 
 const APP_SHELL = [
   "./",
@@ -16,6 +16,17 @@ const VIDEO_PATHS = [
 ];
 
 const absoluteUrl = (path) => new URL(path, self.registration.scope).href;
+
+async function fetchAndCacheAppShell() {
+  const cache = await caches.open(CACHE_NAME);
+
+  for (const path of APP_SHELL) {
+    const url = absoluteUrl(path);
+    const response = await fetch(url, { cache: "reload" });
+    if (!response.ok) throw new Error(`Could not cache ${path}: HTTP ${response.status}`);
+    await cache.put(url, response);
+  }
+}
 
 async function fetchAndCacheVideos(forceRefresh = false) {
   const cache = await caches.open(CACHE_NAME);
@@ -45,8 +56,7 @@ async function videoCacheReady() {
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
-      const cache = await caches.open(CACHE_NAME);
-      await cache.addAll(APP_SHELL);
+      await fetchAndCacheAppShell();
       await fetchAndCacheVideos(true);
       await self.skipWaiting();
     })(),

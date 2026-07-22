@@ -3,76 +3,96 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#080d14" />
+    <meta name="theme-color" content="#fff8eb" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>感應影音牆</title>
-    <meta name="description" content="放置感應板塊，即刻欣賞專屬影片。" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>板塊互動故事牆</title>
+    <meta name="description" content="選一塊、放上去，故事就開始。" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="shell">
       <header class="topbar">
-        <div class="brand">
-          <p class="eyebrow">INTERACTIVE EXPERIENCE</p>
-          <h1>感應影音牆</h1>
+        <div class="welcome">
+          <span class="welcome-mark" aria-hidden="true"></span>
+          <span>歡迎體驗</span>
         </div>
         <div class="connection" aria-live="polite">
           <span class="status-dot" aria-hidden="true"></span>
-          <span id="connectionText">系統連線中</span>
+          <span id="connectionText">體驗準備中…</span>
         </div>
       </header>
 
-      <section class="tutorial" aria-labelledby="tutorialHeading">
-        <div class="tutorial-intro">
-          <p class="eyebrow">HOW TO EXPERIENCE</p>
-          <h2 id="tutorialHeading">放上板塊，影片即刻播放</h2>
+      <section class="guide" aria-labelledby="guideTitle">
+        <div class="guide-title">
+          <p>板塊互動故事牆</p>
+          <h1 id="guideTitle">選一塊，放上去<br />故事就開始！</h1>
+          <span>每次放一塊，平平地貼在感應區上。</span>
         </div>
 
-        <ol class="steps">
-          <li>
-            <span>1</span>
-            <div><strong>選一塊</strong><small>一次選擇一塊板塊</small></div>
+        <ol class="steps" aria-label="體驗步驟">
+          <li class="step step-one">
+            <div class="step-icon pick-icon" aria-hidden="true">
+              <i></i><i></i><i></i>
+            </div>
+            <div class="step-copy">
+              <span>1</span>
+              <strong>選一塊</strong>
+              <small>挑選喜歡的板塊</small>
+            </div>
           </li>
-          <li>
-            <span>2</span>
-            <div><strong>平放感應區</strong><small>讓板塊完整貼合</small></div>
+          <li class="step step-two">
+            <div class="step-icon place-icon" aria-hidden="true">
+              <i></i><b></b>
+            </div>
+            <div class="step-copy">
+              <span>2</span>
+              <strong>放上去</strong>
+              <small>平放在感應區</small>
+            </div>
           </li>
-          <li>
-            <span>3</span>
-            <div><strong>欣賞影片</strong><small>影片將自動開始播放</small></div>
+          <li class="step step-three">
+            <div class="step-icon play-icon" aria-hidden="true">
+              <i></i>
+            </div>
+            <div class="step-copy">
+              <span>3</span>
+              <strong>看故事</strong>
+              <small>影片自動播放</small>
+            </div>
           </li>
         </ol>
-
-        <p class="tutorial-note">若影片沒有開始，請將板塊拿起後重新平放。</p>
       </section>
 
-      <section class="stage" aria-label="影片播放區">
+      <section class="stage" aria-label="故事影片播放區">
         <video
           id="mainVideo"
           playsinline
           muted
           loop
           preload="auto"
-          aria-label="目前播放影片"
+          aria-label="目前播放的故事影片"
         ></video>
 
         <div class="idle-state">
-          <div class="tile-mark" aria-hidden="true"><i></i></div>
-          <p>請放置感應板塊</p>
-          <span>影片將自動播放</span>
+          <div class="place-visual" aria-hidden="true">
+            <div class="floating-tile"><i></i></div>
+            <div class="down-arrow"></div>
+            <div class="sensor-pad"><i></i><i></i><i></i></div>
+          </div>
+          <div class="idle-copy">
+            <p>把板塊放在這裡</p>
+            <span>沒有播放？拿起來，再平放一次就可以囉！</span>
+          </div>
         </div>
 
-        <div class="stage-meta">
-          <div>
-            <span>NOW PLAYING</span>
-            <strong id="nowPlaying">等待體驗</strong>
-          </div>
+        <div class="playing-badge" aria-hidden="true">
+          <i></i><span>故事播放中</span>
         </div>
       </section>
     </main>
 
-    <noscript>此體驗需要啟用 JavaScript。</noscript>
+    <noscript>請啟用 JavaScript 以開始體驗。</noscript>
     <script src="vendor/mqtt.min.js"></script>
     <script src="app.js"></script>
   </body>

@@ -11,7 +11,6 @@ const videos = {
 
 const stage = document.querySelector(".stage");
 const mainVideo = document.querySelector("#mainVideo");
-const nowPlaying = document.querySelector("#nowPlaying");
 const connection = document.querySelector(".connection");
 const connectionText = document.querySelector("#connectionText");
 
@@ -32,12 +31,10 @@ async function showNode(node) {
   mainVideo.src = selected.src;
   mainVideo.load();
   stage.classList.add("has-video");
-  nowPlaying.textContent = selected.name;
-
   try {
     await mainVideo.play();
   } catch {
-    nowPlaying.textContent = "影片準備中";
+    window.setTimeout(() => mainVideo.play().catch(() => {}), 1000);
   }
 }
 
@@ -48,7 +45,6 @@ function showIdle() {
   mainVideo.removeAttribute("src");
   mainVideo.load();
   stage.classList.remove("has-video");
-  nowPlaying.textContent = "等待體驗";
 }
 
 function handleControlMessage(rawMessage) {
@@ -124,7 +120,7 @@ async function prepareBackgroundCache() {
 prepareBackgroundCache();
 
 if (!window.mqtt) {
-  setConnection("connecting", "系統連線中");
+  setConnection("connecting", "體驗準備中…");
 } else {
   const randomId = crypto.randomUUID
     ? crypto.randomUUID().slice(0, 8)
@@ -139,13 +135,13 @@ if (!window.mqtt) {
   });
 
   client.on("connect", () => {
-    setConnection("connected", "系統就緒");
+    setConnection("connected", "體驗準備完成");
     client.subscribe(CONTROL_TOPIC, { qos: 0 });
   });
 
-  client.on("reconnect", () => setConnection("connecting", "系統連線中"));
-  client.on("offline", () => setConnection("connecting", "系統連線中"));
-  client.on("error", () => setConnection("connecting", "系統連線中"));
+  client.on("reconnect", () => setConnection("connecting", "體驗準備中…"));
+  client.on("offline", () => setConnection("connecting", "體驗準備中…"));
+  client.on("error", () => setConnection("connecting", "體驗準備中…"));
 
   client.on("message", (topic, payload) => {
     if (topic === CONTROL_TOPIC) handleControlMessage(payload.toString());
