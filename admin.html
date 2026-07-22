@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src https://api.github.com; img-src 'self' data: https://avatars.githubusercontent.com https://raw.githubusercontent.com; media-src 'self' https://raw.githubusercontent.com; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'"
+    />
+    <meta name="theme-color" content="#111827" />
+    <title>Baechhhh 檔案管理</title>
+    <meta name="description" content="安全地瀏覽、編輯與上傳 GitHub 倉庫檔案。" />
+    <link rel="stylesheet" href="admin.css" />
+    <script src="admin.js" defer></script>
+  </head>
+  <body>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <section class="auth-view" id="authView" aria-labelledby="authTitle">
+      <div class="auth-card">
+        <div class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+        <p class="eyebrow">BAECHHHH / GITHUB</p>
+        <h1 id="authTitle">檔案管理</h1>
+        <p class="auth-intro">瀏覽、修改或上傳展示網站檔案。每次儲存都會建立一筆 GitHub commit。</p>
+
+        <div class="security-note">
+          <strong>Token 不會寫進網站</strong>
+          <span>只保存在這個分頁的 sessionStorage；關閉分頁或登出後即清除。</span>
+        </div>
+
+        <form id="authForm" class="auth-form">
+          <label for="tokenInput">GitHub Personal Access Token</label>
+          <div class="secret-field">
+            <input
+              id="tokenInput"
+              type="password"
+              autocomplete="off"
+              autocapitalize="none"
+              spellcheck="false"
+              placeholder="貼上新建立的 fine-grained token"
+              required
+            />
+            <button id="toggleTokenButton" class="quiet-button" type="button" aria-label="顯示或隱藏 token">顯示</button>
+          </div>
+
+          <div class="repo-grid">
+            <label>
+              Owner
+              <input id="ownerInput" value="Axoled-Student" autocomplete="off" required />
+            </label>
+            <label>
+              Repository
+              <input id="repoInput" value="Baechhhh" autocomplete="off" required />
+            </label>
+            <label>
+              Branch
+              <input id="branchInput" value="main" autocomplete="off" required />
+            </label>
+          </div>
+
+          <button class="primary-button auth-button" id="connectButton" type="submit">
+            驗證並開啟管理頁
+          </button>
+          <p class="form-error" id="authError" role="alert"></p>
+        </form>
+
+        <p class="permission-hint">
+          建議新 token 只授權這個 repository，Repository permissions 設定為
+          <strong>Contents: Read and write</strong>。
+        </p>
+      </div>
+    </section>
+
+    <main class="workspace" id="workspace" hidden>
+      <header class="appbar">
+        <div class="appbar-title">
+          <div class="mini-mark" aria-hidden="true"></div>
+          <div>
+            <p>GitHub 檔案管理</p>
+            <strong id="repoLabel">Axoled-Student/Baechhhh</strong>
+          </div>
+          <span class="branch-pill" id="branchLabel">main</span>
+        </div>
+
+        <div class="account-area">
+          <div class="account" id="account">
+            <img id="accountAvatar" alt="" />
+            <span id="accountName">已連線</span>
+          </div>
+          <button class="secondary-button" id="refreshButton" type="button">重新整理</button>
+          <button class="danger-quiet-button" id="logoutButton" type="button">登出並清除 Token</button>
+        </div>
+      </header>
+
+      <div class="workspace-grid">
+        <aside class="file-panel" aria-labelledby="filesTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">REPOSITORY</p>
+              <h2 id="filesTitle">檔案</h2>
+            </div>
+            <span id="fileCount">0</span>
+          </div>
+          <label class="search-field">
+            <span class="sr-only">搜尋檔案</span>
+            <input id="fileSearch" type="search" placeholder="搜尋路徑…" autocomplete="off" />
+          </label>
+          <div class="file-list" id="fileList" role="listbox" aria-label="倉庫檔案"></div>
+        </aside>
+
+        <section class="editor-panel" aria-labelledby="editorTitle">
+          <div class="editor-header">
+            <div class="file-identity">
+              <p class="eyebrow">SELECTED FILE</p>
+              <h2 id="editorTitle">選擇一個檔案</h2>
+              <span id="fileMeta">從左側清單開啟文字檔，或在右側上傳新檔案。</span>
+            </div>
+            <a class="secondary-button link-button" id="rawLink" href="#" target="_blank" rel="noreferrer" hidden>開啟原始檔</a>
+          </div>
+
+          <div class="empty-editor" id="emptyEditor">
+            <div class="empty-icon" aria-hidden="true"><i></i></div>
+            <strong>尚未選擇檔案</strong>
+            <span>文字檔可以直接編輯；影片與圖片可以預覽及取代。</span>
+          </div>
+
+          <div class="editor-work" id="editorWork" hidden>
+            <textarea id="textEditor" spellcheck="false" aria-label="檔案內容"></textarea>
+
+            <div class="binary-preview" id="binaryPreview" hidden>
+              <video id="videoPreview" controls playsinline hidden></video>
+              <img id="imagePreview" alt="檔案預覽" hidden />
+              <div class="binary-copy">
+                <strong>這不是可直接編輯的文字檔</strong>
+                <span>可使用右側「上傳／取代」選擇新檔並填入相同路徑。</span>
+              </div>
+            </div>
+
+            <div class="commit-row" id="editCommitRow">
+              <label>
+                Commit 訊息
+                <input id="editCommitMessage" placeholder="Update file" autocomplete="off" />
+              </label>
+              <button class="primary-button" id="saveButton" type="button">儲存到 GitHub</button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="upload-panel" aria-labelledby="uploadTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">UPLOAD</p>
+              <h2 id="uploadTitle">上傳／取代</h2>
+            </div>
+          </div>
+
+          <label class="drop-zone" id="dropZone" for="uploadFileInput">
+            <input id="uploadFileInput" type="file" />
+            <span class="upload-symbol" aria-hidden="true">↑</span>
+            <strong>選擇檔案</strong>
+            <small>或將檔案拖曳到這裡</small>
+          </label>
+          <p class="selected-upload" id="selectedUpload">尚未選擇檔案</p>
+
+          <label class="field-stack">
+            GitHub 目標路徑
+            <input id="uploadPath" placeholder="assets/videos/node-1.mp4" autocomplete="off" />
+          </label>
+
+          <label class="field-stack">
+            Commit 訊息
+            <input id="uploadCommitMessage" placeholder="Upload file" autocomplete="off" />
+          </label>
+
+          <div class="upload-warning" id="uploadWarning">
+            GitHub API 不支援超過 100 MB 的單一檔案；大檔案上傳期間請勿關閉分頁。
+          </div>
+
+          <button class="primary-button upload-button" id="uploadButton" type="button" disabled>
+            上傳到 GitHub
+          </button>
+          <div class="progress" id="uploadProgress" hidden>
+            <i></i><span id="uploadProgressText">準備上傳…</span>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <dialog id="confirmDialog" class="confirm-dialog">
+      <div class="dialog-content">
+        <p class="eyebrow">CONFIRM COMMIT</p>
+        <h2 id="confirmTitle">確認寫入 GitHub？</h2>
+        <p id="confirmText"></p>
+        <div class="dialog-actions">
+          <button class="secondary-button" id="cancelConfirmButton" type="button">取消</button>
+          <button class="primary-button" id="confirmActionButton" type="button">確認提交</button>
+        </div>
+      </div>
+    </dialog>
+  </body>
+</html>
