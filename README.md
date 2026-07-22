@@ -7,9 +7,14 @@ ESP32 讀取 GPIO 34 的 ADC 值，透過 Wi-Fi/MQTT 將節點狀態即時送到
 1. 將 `Baechhhh.ino` 上傳至 ESP32。
 2. ESP32 第一次開機會建立名為 `ESP32-Video-Setup` 的 Wi-Fi。
 3. 用手機或平板連上這個 Wi-Fi，設定頁會自動出現；若沒有，開啟 `http://192.168.4.1`。
-4. 選擇現場 Wi-Fi 並輸入密碼。密碼只儲存在 ESP32，不會進入 GitHub。
+4. 一般家用 Wi-Fi：取消勾選「使用 eduroam / WPA2-Enterprise」，選擇 Wi-Fi 並在上方 Password 輸入密碼。
+5. eduroam：選擇 `eduroam`，保留 Enterprise 勾選，將上方一般 Password 留空，再填寫下方的外部身分、完整校園帳號、校園密碼與學校提供的 RADIUS 伺服器網域。
 
-若要更換 Wi-Fi，可清除 ESP32 的 Wi-Fi/NVS 設定後重新啟動，再進行一次上述流程。
+eduroam 帳號通常需要完整 realm，例如 `學號@學校網域`。外部身分可能是同一帳號，也可能是 `anonymous@學校網域`；請以學校資訊中心的說明或 [eduroam CAT](https://cat.eduroam.org/) 設定檔為準。帳號與密碼只儲存在 ESP32 的 NVS，不會寫入 GitHub 或輸出到序列埠。
+
+目前韌體支援 eduroam 常見的 **PEAP / EAP-MSCHAPv2**。學校若使用 EAP-TLS、TTLS 或裝置註冊制度，仍需依該校規格調整。正式展出前也必須把學校提供的 CA PEM 憑證放進 `Config::kEduroamCaPem`，並填入正確 RADIUS 網域；否則雖然可能連得上，卻無法安全確認登入伺服器真偽。
+
+若要更換 Wi-Fi 或 eduroam 帳號，可清除 ESP32 的 Wi-Fi/NVS 設定後重新啟動，再進行一次上述流程。
 
 ## Arduino 需要的程式庫
 
