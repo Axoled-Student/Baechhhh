@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "mrw0s464-1odepdr1o63r6e",
+  "node": 3,
+  "original_name": "moglee12463_reel_20260526165449-2.mov",
+  "content_type": "video/quicktime",
+  "size": 7423454,
+  "previous_video_sha": "38cb248b8c94cee1772f361af38f06e31a401a97",
+  "requested_at": "2026-07-22T11:49:22.588Z",
+  "chunks": [
+    {
+      "sha": "b8b3da19157ae3455683d1d7bcb3a780bd70c6c1",
+      "size": 7423454
+    }
+  ]
+}
