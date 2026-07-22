@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "baechhhh-video-";
-const CACHE_NAME = `${CACHE_PREFIX}2026-07-22-v4`;
+const CACHE_NAME = `${CACHE_PREFIX}2026-07-22-v5`;
 
 const APP_SHELL = [
   "./",

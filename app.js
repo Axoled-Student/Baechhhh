@@ -156,7 +156,16 @@ if (!window.mqtt) {
   client.on("offline", () => setConnection("connecting", "體驗準備中…"));
   client.on("error", () => setConnection("connecting", "體驗準備中…"));
 
-  client.on("message", (topic, payload) => {
-    if (topic === CONTROL_TOPIC) handleControlMessage(payload.toString());
+  client.on("message", (topic, payload, packet) => {
+    if (topic !== CONTROL_TOPIC) return;
+
+    // A retained MQTT message is an old state replayed by the broker when this
+    // page subscribes. Ignore it so refreshing the display always starts idle.
+    if (packet.retain) {
+      showIdle();
+      return;
+    }
+
+    handleControlMessage(payload.toString());
   });
 }

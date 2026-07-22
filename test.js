@@ -57,7 +57,9 @@ function showState(message) {
 
 function publish(message) {
   if (!client?.connected) return;
-  client.publish(CONTROL_TOPIC, message, { qos: 0, retain: true });
+  // Simulator commands are one-shot events. They must not replay every time
+  // the display page refreshes or reconnects.
+  client.publish(CONTROL_TOPIC, message, { qos: 0, retain: false });
 }
 
 function stopAutoTest() {
