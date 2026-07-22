@@ -61,11 +61,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          JOB_FILE=$(jq -r '
-            [(.head_commit.added // [])[], (.head_commit.modified // [])[]]
-            | map(select(test("^\\.video-jobs/[^/]+\\.json$")))
-            | first // empty
-          ' "$GITHUB_EVENT_PATH")
+          JOB_FILE=$(git diff-tree \
+            --no-commit-id \
+            --name-only \
+            --diff-filter=AM \
+            -r "$GITHUB_SHA" \
+            | grep -E '^\.video-jobs/[^/]+\.json$' \
+            | head -n 1 \
+            || true)
 
           if [[ -z "$JOB_FILE" || ! -f "$JOB_FILE" ]]; then
             echo "No video job manifest was found in this push." >&2

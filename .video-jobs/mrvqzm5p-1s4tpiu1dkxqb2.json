@@ -7,6 +7,7 @@
   "size": 74238854,
   "previous_video_sha": "aafae101bf5c57b91f0b255b26046597bfdc800d",
   "requested_at": "2026-07-22T07:15:16.333Z",
+  "retry": 1,
   "chunks": [
     {
       "sha": "a8bc44bca513889ba8b9de8e1e7b9679eb597ba4",
