@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#10162f" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>ESP32 訊號模擬器</title>
+    <link rel="stylesheet" href="test.css" />
+  </head>
+  <body>
+    <main class="controller">
+      <header>
+        <div>
+          <p class="eyebrow">BAECHHHH CONTROL</p>
+          <h1>ESP32 訊號模擬器</h1>
+          <p class="intro">按下節點按鈕，牆內 iPad 會像收到真正 ESP32 訊號一樣切換影片。</p>
+        </div>
+        <div class="connection" id="connection" aria-live="polite">
+          <i></i><span id="connectionText">正在連線…</span>
+        </div>
+      </header>
+
+      <section class="state-card" aria-live="polite">
+        <span>目前訊號</span>
+        <strong id="currentState">等待連線</strong>
+        <code id="currentMessage">—</code>
+      </section>
+
+      <section class="controls" aria-label="模擬 ESP32 節點訊號">
+        <button class="node-button node-one" type="button" data-message="ON|1" disabled>
+          <span>01</span><strong>節點一</strong><small>播放影片 1</small>
+        </button>
+        <button class="node-button node-two" type="button" data-message="ON|2" disabled>
+          <span>02</span><strong>節點二</strong><small>播放影片 2</small>
+        </button>
+        <button class="node-button node-three" type="button" data-message="ON|3" disabled>
+          <span>03</span><strong>節點三</strong><small>播放影片 3</small>
+        </button>
+        <button class="node-button node-off" type="button" data-message="OFF|0" disabled>
+          <span>×</span><strong>移除板塊</strong><small>回到等待畫面</small>
+        </button>
+      </section>
+
+      <section class="tools">
+        <button id="autoButton" type="button" disabled>開始自動測試 1 → 2 → 3</button>
+        <a href="./" target="_blank" rel="noopener">另開展示畫面 ↗</a>
+      </section>
+
+      <section class="log-card">
+        <div class="log-heading"><span>訊號紀錄</span><small>最新五筆</small></div>
+        <ol id="eventLog"><li>等待第一個訊號…</li></ol>
+      </section>
+
+      <p class="notice">這是公開測試控制頁。測試結束後請按「移除板塊」，讓展示畫面回到等待狀態。</p>
+    </main>
+
+    <script src="vendor/mqtt.min.js"></script>
+    <script src="test.js"></script>
+  </body>
+</html>

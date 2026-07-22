@@ -51,3 +51,7 @@ arduino-cli compile --fqbn esp32:esp32:esp32 .
 ## 即時連線說明
 
 GitHub Pages 只負責公開靜態網站；ESP32 與網頁之間使用 HiveMQ 公開測試 MQTT broker。這適合目前 Demo，不提供私密性或服務保證。正式展出時建議改成有帳號密碼的專用 MQTT broker，並同步更換 `Baechhhh.ino` 和 `app.js` 裡的 broker/topic。
+
+## ESP32 訊號模擬器
+
+開啟 `test.html` 可從手機或電腦模擬 ESP32 的 `ON|1`、`ON|2`、`ON|3`、`OFF|0` 訊號，也能自動輪流測試三個節點。測試頁與牆內 iPad 使用同一個 MQTT topic，因此按下後展示畫面會即時切換。
