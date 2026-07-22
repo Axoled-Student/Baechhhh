@@ -8,8 +8,8 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.github.com; img-src 'self' data:; media-src 'self' blob: https://raw.githubusercontent.com; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'">
     <title>更新展示影片</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="admin.css?v=2">
-    <script src="admin.js?v=3" defer></script>
+    <link rel="stylesheet" href="admin.css?v=4">
+    <script src="admin.js?v=4" defer></script>
   </head>
   <body>
     <div class="page-shell">
@@ -52,7 +52,7 @@
           <button id="changeTokenButton" class="text-button" type="button">更換 Token</button>
         </header>
 
-        <p class="intro">選好要更換的編號，再選擇新影片並上傳。</p>
+        <p class="intro">選好要更換的編號，再選擇新影片。網站會自動轉成適合 iPad 的格式。</p>
 
         <section class="step-card" aria-labelledby="choose-node-title">
           <div class="step-heading">
@@ -87,18 +87,24 @@
           <div class="step-heading">
             <span class="step-number" aria-hidden="true">2</span>
             <div>
-              <h2 id="choose-file-title">選擇新的 MP4 影片</h2>
-              <p>選完後會先在下方預覽，不會立刻上傳。</p>
+              <h2 id="choose-file-title">選擇新的影片</h2>
+              <p>MP4、MOV、MKV、AVI、WebM 都可以，選完不會立刻上傳。</p>
             </div>
           </div>
 
-          <input id="videoFileInput" class="file-input" type="file" accept="video/mp4,.mp4">
+          <div class="conversion-note">
+            <strong>自動轉檔</strong>
+            <span>GitHub 會把影片轉成 H.264 + AAC MP4，並自動壓縮到可發布的大小。</span>
+          </div>
+
+          <input id="videoFileInput" class="file-input" type="file" accept="video/*,.mkv,.avi,.mov,.m4v,.webm">
           <label class="file-button" for="videoFileInput">選擇影片</label>
           <p id="selectedFileName" class="selected-file">尚未選擇影片</p>
 
           <div id="newVideoPanel" class="new-video" hidden>
             <p>新影片預覽</p>
             <video id="newVideo" controls playsinline preload="metadata"></video>
+            <p id="newVideoHint" class="preview-hint">如果這個格式無法預覽，仍然可以上傳並自動轉檔。</p>
           </div>
         </section>
 
@@ -106,18 +112,32 @@
           <div class="step-heading">
             <span class="step-number" aria-hidden="true">3</span>
             <div>
-              <h2 id="upload-title">上傳並替換</h2>
-              <p id="uploadSummary">新影片會替換「影片 1」。</p>
+              <h2 id="upload-title">上傳並自動轉檔</h2>
+              <p id="uploadSummary">轉檔完成後會替換「影片 1」。</p>
             </div>
           </div>
 
           <button id="uploadButton" class="primary-button upload-button" type="button" disabled>
-            上傳並替換影片 1
+            上傳並自動轉檔影片 1
           </button>
+          <div id="jobProgress" class="job-progress" hidden>
+            <div
+              id="progressTrack"
+              class="progress-track"
+              role="progressbar"
+              aria-label="影片處理進度"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <span id="progressBar"></span>
+            </div>
+            <p id="progressText">準備中…</p>
+          </div>
           <p id="uploadMessage" class="message" role="status" aria-live="polite" hidden></p>
         </section>
 
-        <p class="footer-note">上傳完成後，牆內 iPad 最晚約 5 分鐘會取得新影片。</p>
+        <p class="footer-note">上傳後可以關閉此頁；GitHub 會繼續轉檔。完成後，牆內 iPad 最晚約 5 分鐘會取得新影片。</p>
       </main>
     </div>
 

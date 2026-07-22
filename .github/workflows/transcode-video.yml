@@ -1,0 +1,203 @@
+name: Transcode uploaded video
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".video-jobs/*.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: video-transcode
+  cancel-in-progress: false
+
+jobs:
+  check-runner:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check FFmpeg
+        run: |
+          set -euo pipefail
+          ffmpeg -version
+          ffprobe -version
+          jq --version
+
+  transcode:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Assemble and transcode video
+        id: transcode
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          JOB_FILE=$(jq -r '
+            [(.head_commit.added // [])[], (.head_commit.modified // [])[]]
+            | map(select(test("^\\.video-jobs/[^/]+\\.json$")))
+            | first // empty
+          ' "$GITHUB_EVENT_PATH")
+
+          if [[ -z "$JOB_FILE" || ! -f "$JOB_FILE" ]]; then
+            echo "No video job manifest was found in this push." >&2
+            exit 1
+          fi
+
+          JOB_ID=$(jq -r '.id // empty' "$JOB_FILE")
+          NODE=$(jq -r '.node // empty' "$JOB_FILE")
+          EXPECTED_SIZE=$(jq -r '.size // empty' "$JOB_FILE")
+          mapfile -t CHUNKS < <(jq -r '.chunks[].sha' "$JOB_FILE")
+
+          echo "job_id=$JOB_ID" >> "$GITHUB_OUTPUT"
+          echo "job_file=$JOB_FILE" >> "$GITHUB_OUTPUT"
+
+          if [[ ! "$JOB_ID" =~ ^[a-zA-Z0-9-]+$ ]]; then
+            echo "Invalid job id." >&2
+            exit 1
+          fi
+          if [[ ! "$NODE" =~ ^[123]$ ]]; then
+            echo "Invalid video node." >&2
+            exit 1
+          fi
+          if [[ ! "$EXPECTED_SIZE" =~ ^[0-9]+$ || "$EXPECTED_SIZE" -le 0 ]]; then
+            echo "Invalid source size." >&2
+            exit 1
+          fi
+          if [[ "${#CHUNKS[@]}" -eq 0 ]]; then
+            echo "No upload chunks were provided." >&2
+            exit 1
+          fi
+
+          INPUT_FILE="$RUNNER_TEMP/source-video"
+          OUTPUT_FILE="$RUNNER_TEMP/output.mp4"
+          : > "$INPUT_FILE"
+
+          for SHA in "${CHUNKS[@]}"; do
+            if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Invalid blob SHA: $SHA" >&2
+              exit 1
+            fi
+            curl \
+              --fail \
+              --location \
+              --silent \
+              --show-error \
+              --retry 3 \
+              -H "Accept: application/vnd.github.raw+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/git/blobs/$SHA" \
+              >> "$INPUT_FILE"
+          done
+
+          ACTUAL_SIZE=$(stat -c%s "$INPUT_FILE")
+          if [[ "$ACTUAL_SIZE" -ne "$EXPECTED_SIZE" ]]; then
+            echo "Source size mismatch: expected $EXPECTED_SIZE, received $ACTUAL_SIZE." >&2
+            exit 1
+          fi
+
+          DURATION=$(ffprobe \
+            -v error \
+            -show_entries format=duration \
+            -of default=noprint_wrappers=1:nokey=1 \
+            "$INPUT_FILE")
+
+          if ! awk -v duration="$DURATION" 'BEGIN { exit !(duration > 0) }'; then
+            echo "FFmpeg could not read the video duration." >&2
+            exit 1
+          fi
+
+          VIDEO_KBPS=$(awk -v duration="$DURATION" 'BEGIN {
+            total = int((85 * 8 * 1024) / duration);
+            video = total - 160;
+            if (video > 5000) video = 5000;
+            if (video < 350) video = 350;
+            print int(video);
+          }')
+          MAXRATE_KBPS=$((VIDEO_KBPS * 12 / 10))
+          BUFSIZE_KBPS=$((MAXRATE_KBPS * 2))
+
+          ffmpeg \
+            -hide_banner \
+            -y \
+            -i "$INPUT_FILE" \
+            -map 0:v:0 \
+            -map "0:a:0?" \
+            -vf "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=30,format=yuv420p" \
+            -c:v libx264 \
+            -preset medium \
+            -b:v "${VIDEO_KBPS}k" \
+            -maxrate "${MAXRATE_KBPS}k" \
+            -bufsize "${BUFSIZE_KBPS}k" \
+            -c:a aac \
+            -b:a 160k \
+            -ar 48000 \
+            -ac 2 \
+            -sn \
+            -dn \
+            -movflags +faststart \
+            -max_muxing_queue_size 4096 \
+            "$OUTPUT_FILE"
+
+          OUTPUT_SIZE=$(stat -c%s "$OUTPUT_FILE")
+          MAX_OUTPUT_SIZE=$((95 * 1024 * 1024))
+          if [[ "$OUTPUT_SIZE" -le 0 || "$OUTPUT_SIZE" -gt "$MAX_OUTPUT_SIZE" ]]; then
+            echo "Transcoded video is outside the allowed size: $OUTPUT_SIZE bytes." >&2
+            exit 1
+          fi
+
+          VIDEO_CODEC=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of csv=p=0 "$OUTPUT_FILE")
+          PIXEL_FORMAT=$(ffprobe -v error -select_streams v:0 -show_entries stream=pix_fmt -of csv=p=0 "$OUTPUT_FILE")
+          AUDIO_CODEC=$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 "$OUTPUT_FILE" || true)
+          if [[ "$VIDEO_CODEC" != "h264" || "$PIXEL_FORMAT" != "yuv420p" ]]; then
+            echo "Unexpected output video format: $VIDEO_CODEC / $PIXEL_FORMAT." >&2
+            exit 1
+          fi
+          if [[ -n "$AUDIO_CODEC" && "$AUDIO_CODEC" != "aac" ]]; then
+            echo "Unexpected output audio format: $AUDIO_CODEC." >&2
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+
+          TARGET="assets/videos/node-$NODE.mp4"
+          cp "$OUTPUT_FILE" "$TARGET"
+          git add "$TARGET"
+          git rm -- "$JOB_FILE"
+          git commit -m "Transcode video $NODE"
+
+          for ATTEMPT in 1 2 3; do
+            if git push origin HEAD:main; then
+              break
+            fi
+            if [[ "$ATTEMPT" -eq 3 ]]; then
+              echo "Unable to push transcoded video after three attempts." >&2
+              exit 1
+            fi
+            git pull --rebase origin main
+          done
+
+          echo "output_size=$OUTPUT_SIZE" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Request GitHub Pages update
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds"

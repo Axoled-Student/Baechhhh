@@ -6,8 +6,13 @@ const BRANCH = "main";
 const API_ROOT = "https://api.github.com";
 const API_VERSION = "2026-03-10";
 const TOKEN_STORAGE_KEY = "baechhhh-video-upload-token";
-const MAX_FILE_BYTES = 100 * 1024 * 1024;
+const JOB_STORAGE_KEY = "baechhhh-video-transcode-job";
+const UPLOAD_CHUNK_BYTES = 12 * 1024 * 1024;
+const MAX_SOURCE_BYTES = 1024 * 1024 * 1024;
+const JOB_POLL_INTERVAL_MS = 10000;
+const JOB_TIMEOUT_MS = 60 * 60 * 1000;
 
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "mkv", "avi", "webm", "mpeg", "mpg"]);
 const VIDEO_PATHS = {
   1: "assets/videos/node-1.mp4",
   2: "assets/videos/node-2.mp4",
@@ -21,6 +26,8 @@ const state = {
   selectedPreviewUrl: "",
   metadata: new Map(),
   busy: false,
+  pendingJob: null,
+  pollTimer: 0,
 };
 
 const elements = {
@@ -40,9 +47,14 @@ const elements = {
   selectedFileName: document.querySelector("#selectedFileName"),
   newVideoPanel: document.querySelector("#newVideoPanel"),
   newVideo: document.querySelector("#newVideo"),
+  newVideoHint: document.querySelector("#newVideoHint"),
   uploadSummary: document.querySelector("#uploadSummary"),
   uploadButton: document.querySelector("#uploadButton"),
   uploadMessage: document.querySelector("#uploadMessage"),
+  jobProgress: document.querySelector("#jobProgress"),
+  progressTrack: document.querySelector("#progressTrack"),
+  progressBar: document.querySelector("#progressBar"),
+  progressText: document.querySelector("#progressText"),
   nodeInputs: Array.from(document.querySelectorAll('input[name="node"]')),
 };
 
@@ -58,6 +70,14 @@ function setMessage(element, text, kind = "info") {
   element.hidden = !text;
 }
 
+function setProgress(percent, text) {
+  const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
+  elements.jobProgress.hidden = !text;
+  elements.progressBar.style.width = `${safePercent}%`;
+  elements.progressTrack.setAttribute("aria-valuenow", String(safePercent));
+  elements.progressText.textContent = text || "";
+}
+
 function friendlyError(error) {
   if (error && error.status === 401) {
     return "Token 無效或已過期，請輸入新的 Token。";
@@ -66,10 +86,10 @@ function friendlyError(error) {
     return "這個 Token 沒有上傳權限。請確認已授權此網站的 Contents：Read and write。";
   }
   if (error && error.status === 409) {
-    return "影片剛被其他人更新，請再按一次上傳。";
+    return "GitHub 上的檔案剛被更新，請再試一次。";
   }
   if (error && error.status === 422) {
-    return "GitHub 無法接受這個檔案。請確認是 MP4，且檔案小於 100 MB。";
+    return "GitHub 無法接受這次上傳，請稍後再試或重新選擇影片。";
   }
   if (error instanceof TypeError) {
     return "目前無法連上 GitHub，請檢查網路後再試一次。";
@@ -80,12 +100,13 @@ function friendlyError(error) {
 function createApiError(response, data) {
   const error = new Error(data && data.message ? data.message : `GitHub 回傳 ${response.status}`);
   error.status = response.status;
+  error.data = data;
   return error;
 }
 
 async function apiRequest(path, options = {}) {
   const headers = new Headers(options.headers || {});
-  headers.set("Accept", "application/vnd.github+json");
+  headers.set("Accept", options.accept || "application/vnd.github+json");
   headers.set("Authorization", `Bearer ${state.token}`);
   headers.set("X-GitHub-Api-Version", API_VERSION);
 
@@ -124,6 +145,9 @@ async function verifyToken() {
 function humanFileSize(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) {
     return "大小未知";
+  }
+  if (bytes >= 1024 * 1024 * 1024) {
+    return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
   }
   if (bytes >= 1024 * 1024) {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -186,11 +210,30 @@ function setCurrentVideo(metadata, node = state.node) {
 }
 
 function updateNodeText() {
+  const activeNode = state.pendingJob ? state.pendingJob.node : state.node;
   elements.currentNodeLabel.textContent = String(state.node);
-  elements.uploadSummary.textContent = `新影片會替換「影片 ${state.node}」。`;
-  elements.uploadButton.textContent = state.busy
-    ? `正在上傳影片 ${state.node}…`
-    : `上傳並替換影片 ${state.node}`;
+  elements.uploadSummary.textContent = state.pendingJob
+    ? `GitHub 正在處理「影片 ${activeNode}」。完成後會自動更新。`
+    : `轉檔完成後會替換「影片 ${state.node}」。`;
+
+  if (state.pendingJob) {
+    elements.uploadButton.textContent = `影片 ${activeNode} 正在自動轉檔…`;
+  } else if (state.busy) {
+    elements.uploadButton.textContent = `正在上傳影片 ${state.node}…`;
+  } else {
+    elements.uploadButton.textContent = `上傳並自動轉檔影片 ${state.node}`;
+  }
+}
+
+function updateControls() {
+  const locked = state.busy || Boolean(state.pendingJob);
+  elements.nodeInputs.forEach((input) => {
+    input.disabled = locked;
+  });
+  elements.videoFileInput.disabled = locked;
+  elements.changeTokenButton.disabled = state.busy;
+  elements.uploadButton.disabled = locked || !state.selectedFile;
+  updateNodeText();
 }
 
 function clearSelectedFile() {
@@ -203,43 +246,53 @@ function clearSelectedFile() {
   elements.selectedFileName.textContent = "尚未選擇影片";
   elements.newVideo.removeAttribute("src");
   elements.newVideo.load();
+  elements.newVideo.hidden = false;
+  elements.newVideoHint.textContent = "如果這個格式無法預覽，仍然可以上傳並自動轉檔。";
   elements.newVideoPanel.hidden = true;
-  elements.uploadButton.disabled = true;
+  updateControls();
 }
 
 async function selectNode(node) {
   state.node = node;
   clearSelectedFile();
-  setMessage(elements.uploadMessage, "");
+  if (!state.pendingJob) {
+    setMessage(elements.uploadMessage, "");
+    setProgress(0, "");
+  }
   updateNodeText();
 
   elements.currentVideoInfo.textContent = "讀取中…";
   const cached = state.metadata.get(node);
   if (cached !== undefined) {
-    setCurrentVideo(cached);
+    setCurrentVideo(cached, node);
     return;
   }
 
   try {
-    setCurrentVideo(await loadVideoMetadata(node));
+    setCurrentVideo(await loadVideoMetadata(node), node);
   } catch (error) {
     elements.currentVideoInfo.textContent = "無法讀取";
     setMessage(elements.uploadMessage, friendlyError(error), "error");
   }
 }
 
+function videoExtension(fileName) {
+  const parts = fileName.toLowerCase().split(".");
+  return parts.length > 1 ? parts.pop() : "";
+}
+
 function validateVideo(file) {
   if (!file) {
-    throw new Error("請先選擇一個 MP4 影片。 ");
+    throw new Error("請先選擇一個影片。");
   }
-  if (!file.name.toLowerCase().endsWith(".mp4")) {
-    throw new Error("請選擇副檔名為 .mp4 的影片。 ");
+  if (!VIDEO_EXTENSIONS.has(videoExtension(file.name)) && !file.type.startsWith("video/")) {
+    throw new Error("請選擇影片檔案，例如 MP4、MOV、MKV、AVI 或 WebM。");
   }
   if (file.size <= 0) {
-    throw new Error("這個影片是空的，請重新選擇。 ");
+    throw new Error("這個影片是空的，請重新選擇。");
   }
-  if (file.size > MAX_FILE_BYTES) {
-    throw new Error("影片超過 100 MB，請先壓縮再上傳。 ");
+  if (file.size > MAX_SOURCE_BYTES) {
+    throw new Error("影片超過 1 GB，請先縮小檔案再上傳。");
   }
 }
 
@@ -248,7 +301,7 @@ function chooseFile(file) {
     validateVideo(file);
   } catch (error) {
     clearSelectedFile();
-    setMessage(elements.uploadMessage, error.message.trim(), "error");
+    setMessage(elements.uploadMessage, error.message, "error");
     return;
   }
 
@@ -259,11 +312,13 @@ function chooseFile(file) {
   state.selectedFile = file;
   state.selectedPreviewUrl = URL.createObjectURL(file);
   elements.selectedFileName.textContent = `${file.name} · ${humanFileSize(file.size)}`;
+  elements.newVideo.hidden = false;
   elements.newVideo.src = state.selectedPreviewUrl;
   elements.newVideoPanel.hidden = false;
   elements.newVideo.load();
-  elements.uploadButton.disabled = false;
   setMessage(elements.uploadMessage, "");
+  setProgress(0, "");
+  updateControls();
 }
 
 function bytesToBase64(buffer) {
@@ -276,19 +331,228 @@ function bytesToBase64(buffer) {
   return btoa(binary);
 }
 
+function textToBase64(text) {
+  return bytesToBase64(new TextEncoder().encode(text).buffer);
+}
+
+function createJobId() {
+  const random = new Uint32Array(2);
+  crypto.getRandomValues(random);
+  return `${Date.now().toString(36)}-${random[0].toString(36)}${random[1].toString(36)}`;
+}
+
 function setBusy(busy) {
   state.busy = busy;
-  elements.nodeInputs.forEach((input) => {
-    input.disabled = busy;
+  updateControls();
+}
+
+function savePendingJob(job) {
+  try {
+    localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify(job));
+  } catch {
+    // The current page still tracks the job if browser storage is unavailable.
+  }
+}
+
+function readPendingJob() {
+  try {
+    const value = localStorage.getItem(JOB_STORAGE_KEY);
+    if (!value) {
+      return null;
+    }
+    const job = JSON.parse(value);
+    if (!job || ![1, 2, 3].includes(job.node) || !job.commitSha || !job.startedAt) {
+      localStorage.removeItem(JOB_STORAGE_KEY);
+      return null;
+    }
+    return job;
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingJob() {
+  if (state.pollTimer) {
+    clearTimeout(state.pollTimer);
+    state.pollTimer = 0;
+  }
+  state.pendingJob = null;
+  try {
+    localStorage.removeItem(JOB_STORAGE_KEY);
+  } catch {
+    // The in-memory job is still cleared.
+  }
+  updateControls();
+}
+
+async function createUploadBlob(buffer) {
+  const result = await apiRequest(`/repos/${OWNER}/${REPOSITORY}/git/blobs`, {
+    method: "POST",
+    body: JSON.stringify({
+      content: bytesToBase64(buffer),
+      encoding: "base64",
+    }),
   });
-  elements.videoFileInput.disabled = busy;
-  elements.changeTokenButton.disabled = busy;
-  elements.uploadButton.disabled = busy || !state.selectedFile;
-  updateNodeText();
+  if (!result || !result.sha) {
+    throw new Error("GitHub 沒有回傳上傳結果，請再試一次。");
+  }
+  return result.sha;
+}
+
+async function queueTranscodeJob(node, file, previousSha) {
+  const totalChunks = Math.ceil(file.size / UPLOAD_CHUNK_BYTES);
+  const chunks = [];
+
+  for (let index = 0; index < totalChunks; index += 1) {
+    const start = index * UPLOAD_CHUNK_BYTES;
+    const end = Math.min(file.size, start + UPLOAD_CHUNK_BYTES);
+    const progress = 5 + (index / totalChunks) * 65;
+    setProgress(progress, `正在上傳第 ${index + 1}／${totalChunks} 段，請勿關閉此頁…`);
+    setMessage(elements.uploadMessage, "影片會分段安全上傳，全部完成後才開始轉檔。");
+
+    const buffer = await file.slice(start, end).arrayBuffer();
+    const sha = await createUploadBlob(buffer);
+    chunks.push({ sha, size: end - start });
+  }
+
+  setProgress(73, "影片上傳完成，正在啟動自動轉檔…");
+  const jobId = createJobId();
+  const manifest = {
+    version: 1,
+    id: jobId,
+    node,
+    original_name: file.name,
+    content_type: file.type || "application/octet-stream",
+    size: file.size,
+    previous_video_sha: previousSha || "",
+    requested_at: new Date().toISOString(),
+    chunks,
+  };
+  const jobPath = `.video-jobs/${jobId}.json`;
+  const result = await apiRequest(`/repos/${OWNER}/${REPOSITORY}/contents/${jobPath}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      message: `Queue automatic transcode for video ${node}`,
+      content: textToBase64(`${JSON.stringify(manifest, null, 2)}\n`),
+      branch: BRANCH,
+    }),
+  });
+
+  if (!result || !result.commit || !result.commit.sha) {
+    throw new Error("影片已上傳，但無法啟動轉檔。請再試一次。");
+  }
+
+  return {
+    id: jobId,
+    node,
+    previousSha: previousSha || "",
+    commitSha: result.commit.sha,
+    startedAt: Date.now(),
+  };
+}
+
+async function findTranscodeRun(commitSha) {
+  try {
+    const result = await apiRequest(
+      `/repos/${OWNER}/${REPOSITORY}/actions/runs?head_sha=${encodeURIComponent(commitSha)}&per_page=20`,
+    );
+    if (!result || !Array.isArray(result.workflow_runs)) {
+      return null;
+    }
+    return result.workflow_runs.find((run) => run.name === "Transcode uploaded video") || null;
+  } catch (error) {
+    if (error.status === 401) {
+      throw error;
+    }
+    return null;
+  }
+}
+
+function scheduleJobPoll(delay = JOB_POLL_INTERVAL_MS) {
+  if (state.pollTimer) {
+    clearTimeout(state.pollTimer);
+  }
+  state.pollTimer = window.setTimeout(pollPendingJob, delay);
+}
+
+async function finishPendingJob(metadata, job) {
+  clearPendingJob();
+  state.metadata.set(job.node, metadata);
+  setCurrentVideo(metadata, job.node);
+  setProgress(100, "自動轉檔完成");
+  setMessage(
+    elements.uploadMessage,
+    `影片 ${job.node} 已轉檔並替換完成。牆內 iPad 最晚約 5 分鐘會自動更新。`,
+    "success",
+  );
+}
+
+async function pollPendingJob() {
+  const job = state.pendingJob;
+  if (!job) {
+    return;
+  }
+
+  try {
+    const metadata = await loadVideoMetadata(job.node);
+    if (metadata && metadata.sha && metadata.sha !== job.previousSha) {
+      await finishPendingJob(metadata, job);
+      return;
+    }
+
+    const run = await findTranscodeRun(job.commitSha);
+    const elapsed = Date.now() - job.startedAt;
+    if (run && run.status === "completed" && run.conclusion !== "success") {
+      clearPendingJob();
+      setProgress(0, "");
+      setMessage(elements.uploadMessage, "GitHub 自動轉檔失敗。請重新選擇影片再試一次。", "error");
+      return;
+    }
+    if (elapsed > JOB_TIMEOUT_MS) {
+      clearPendingJob();
+      setProgress(0, "");
+      setMessage(elements.uploadMessage, "轉檔等待超過一小時，請重新上傳或到 GitHub Actions 查看結果。", "error");
+      return;
+    }
+
+    if (run && run.status === "in_progress") {
+      const estimated = Math.min(94, 80 + (elapsed / JOB_TIMEOUT_MS) * 14);
+      setProgress(estimated, "GitHub 正在自動轉檔，通常需要幾分鐘…");
+      setMessage(elements.uploadMessage, `影片 ${job.node} 已安全上傳，可以關閉此頁。`, "info");
+    } else if (run && run.status === "completed") {
+      setProgress(95, "轉檔完成，正在更新影片預覽…");
+    } else {
+      setProgress(78, "影片已上傳，正在等待 GitHub 開始轉檔…");
+      setMessage(elements.uploadMessage, `影片 ${job.node} 已安全上傳，可以關閉此頁。`, "info");
+    }
+  } catch (error) {
+    if (error.status === 401) {
+      if (state.pollTimer) {
+        clearTimeout(state.pollTimer);
+      }
+      forgetToken();
+      showTokenScreen(friendlyError(error));
+      return;
+    }
+    setProgress(78, "暫時無法取得進度，稍後會自動重試…");
+  }
+
+  if (state.pendingJob && state.pendingJob.id === job.id) {
+    scheduleJobPoll();
+  }
+}
+
+function startPendingJob(job) {
+  state.pendingJob = job;
+  savePendingJob(job);
+  updateControls();
+  setProgress(76, "影片已上傳，正在等待 GitHub 開始轉檔…");
+  setMessage(elements.uploadMessage, `影片 ${job.node} 已安全上傳，可以關閉此頁。`);
+  scheduleJobPoll(2500);
 }
 
 async function uploadSelectedVideo() {
-  if (state.busy || !state.selectedFile) {
+  if (state.busy || state.pendingJob || !state.selectedFile) {
     return;
   }
 
@@ -298,50 +562,20 @@ async function uploadSelectedVideo() {
   try {
     validateVideo(file);
     setBusy(true);
-    setMessage(elements.uploadMessage, "正在準備影片，請不要關閉此頁…");
+    setProgress(2, "正在準備影片…");
+    setMessage(elements.uploadMessage, "請保持此頁開啟，直到所有分段上傳完成。");
 
     const latestMetadata = await loadVideoMetadata(node);
-    const content = bytesToBase64(await file.arrayBuffer());
-    const body = {
-      message: `Replace video ${node}`,
-      content,
-      branch: BRANCH,
-    };
-
-    if (latestMetadata && latestMetadata.sha) {
-      body.sha = latestMetadata.sha;
-    }
-
-    setMessage(elements.uploadMessage, "正在上傳到 GitHub，較大的影片會需要幾分鐘…");
-    const result = await apiRequest(metadataPath(node).split("?ref=")[0], {
-      method: "PUT",
-      body: JSON.stringify(body),
-    });
-
-    if (result && result.content) {
-      const uploadedMetadata = {
-        ...result.content,
-        revision: result.commit && result.commit.sha ? result.commit.sha : BRANCH,
-      };
-      state.metadata.set(node, uploadedMetadata);
-      setCurrentVideo(uploadedMetadata, node);
-    } else {
-      state.metadata.delete(node);
-      setCurrentVideo(await loadVideoMetadata(node));
-    }
-
+    const job = await queueTranscodeJob(node, file, latestMetadata ? latestMetadata.sha : "");
     clearSelectedFile();
-    setMessage(
-      elements.uploadMessage,
-      `影片 ${node} 已上傳完成。牆內 iPad 最晚約 5 分鐘會自動更新。`,
-      "success",
-    );
+    startPendingJob(job);
   } catch (error) {
     if (error.status === 401) {
       forgetToken();
       showTokenScreen(friendlyError(error));
       return;
     }
+    setProgress(0, "");
     setMessage(elements.uploadMessage, friendlyError(error), "error");
   } finally {
     setBusy(false);
@@ -377,13 +611,27 @@ function showTokenScreen(message = "") {
 }
 
 async function openManager() {
+  const savedJob = state.pendingJob || readPendingJob();
+  if (savedJob) {
+    state.pendingJob = savedJob;
+    state.node = savedJob.node;
+    const selectedInput = elements.nodeInputs.find((input) => Number(input.value) === savedJob.node);
+    if (selectedInput) {
+      selectedInput.checked = true;
+    }
+  }
+
   showOnly("manager");
-  updateNodeText();
+  updateControls();
   await selectNode(state.node);
 
   Promise.all([1, 2, 3].filter((node) => node !== state.node).map(loadVideoMetadata)).catch(() => {
     // Other slots will retry when the user selects them.
   });
+
+  if (state.pendingJob) {
+    startPendingJob(state.pendingJob);
+  }
 }
 
 async function handleTokenSubmit(event) {
@@ -418,6 +666,7 @@ async function handleTokenSubmit(event) {
 
 async function initialize() {
   const savedToken = readSavedToken();
+  state.pendingJob = readPendingJob();
   if (!savedToken) {
     showTokenScreen();
     return;
@@ -437,6 +686,10 @@ async function initialize() {
 elements.tokenForm.addEventListener("submit", handleTokenSubmit);
 
 elements.changeTokenButton.addEventListener("click", () => {
+  if (state.pollTimer) {
+    clearTimeout(state.pollTimer);
+    state.pollTimer = 0;
+  }
   forgetToken();
   clearSelectedFile();
   showTokenScreen();
@@ -444,7 +697,7 @@ elements.changeTokenButton.addEventListener("click", () => {
 
 elements.nodeInputs.forEach((input) => {
   input.addEventListener("change", () => {
-    if (input.checked) {
+    if (input.checked && !state.pendingJob) {
       selectNode(Number(input.value));
     }
   });
@@ -454,11 +707,26 @@ elements.videoFileInput.addEventListener("change", () => {
   chooseFile(elements.videoFileInput.files && elements.videoFileInput.files[0]);
 });
 
+elements.newVideo.addEventListener("loadedmetadata", () => {
+  elements.newVideo.hidden = false;
+  elements.newVideoHint.textContent = "影片已準備好；按下方按鈕後才會上傳。";
+});
+
+elements.newVideo.addEventListener("error", () => {
+  if (state.selectedFile) {
+    elements.newVideo.hidden = true;
+    elements.newVideoHint.textContent = "此格式無法在瀏覽器預覽，但仍然可以上傳並自動轉檔。";
+  }
+});
+
 elements.uploadButton.addEventListener("click", uploadSelectedVideo);
 
 window.addEventListener("beforeunload", () => {
   if (state.selectedPreviewUrl) {
     URL.revokeObjectURL(state.selectedPreviewUrl);
+  }
+  if (state.pollTimer) {
+    clearTimeout(state.pollTimer);
   }
 });
 

@@ -2,28 +2,22 @@
 
 ## 影片格式
 
-上傳前建議先轉成：
+管理頁會自動轉檔，所以可以直接選擇 MP4、MOV、M4V、MKV、AVI、WebM、MPEG 等常見影片，不需要自己改檔名或先學 FFmpeg。來源檔案需小於 1 GB。
 
-- MP4
-- H.264 影像編碼
-- 16:9 畫面比例
-- 1280×720 或 1920×1080
-- 檔案名稱只能是 `node-1.mp4`、`node-2.mp4`、`node-3.mp4`
-- 使用 GitHub 網頁上傳時，每支影片需小於 25 MiB
+GitHub 會自動輸出最高 1920×1080、30 FPS、H.264 影像、AAC 聲音與 `yuv420p` 色彩格式的 MP4，並壓縮到 GitHub Pages 可以發布的大小。
 
 影片支援聲音。因 iPad Safari 的自動播放限制，每次 Web App 開啟或重新載入後，工作人員必須先在畫面上點一次「開啟聲音並開始體驗」。按鈕消失後，同一個頁面收到的 ESP32 訊號都會自動全螢幕、有聲播放。請在 iPad 封入牆面或開啟「引導使用模式」前完成這一步。
 
-## 用 GitHub 網頁更換影片
+## 用簡易管理頁更換影片
 
-1. 開啟 <https://github.com/Axoled-Student/Baechhhh/tree/main/assets/videos>。
-2. 按右上角 **Add file** → **Upload files**。
-3. 將新影片改成正確檔名後拖進去：
-   - 第一支：`node-1.mp4`
-   - 第二支：`node-2.mp4`
-   - 第三支：`node-3.mp4`
-4. 在頁面下方按 **Commit changes**。
-5. 等待約一分鐘讓 GitHub Pages 發布。
-6. 固定 iPad 每五分鐘會檢查影片是否更新；不需要觸控重新整理。
+1. 開啟 <https://axoled-student.github.io/Baechhhh/admin.html>。
+2. 第一次使用時貼上 GitHub Token；同一台裝置下次會自動記住。
+3. 選擇要替換「影片 1／影片 2／影片 3」。
+4. 按「選擇影片」並選取來源檔案。
+5. 按「上傳並自動轉檔」。分段上傳完成後即可關閉頁面，GitHub 會繼續處理。
+6. 轉檔通常需要幾分鐘；固定 iPad 最晚約五分鐘後會取得新影片，不需要觸控重新整理。
+
+Token 只需要授權 `Axoled-Student/Baechhhh`，並給予 `Contents: Read and write`。請勿在公用裝置儲存 Token。
 
 ## 將任意影片轉成 10 秒 Demo
 
