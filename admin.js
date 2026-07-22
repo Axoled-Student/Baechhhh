@@ -135,11 +135,21 @@ function metadataPath(node) {
   return `/repos/${OWNER}/${REPOSITORY}/contents/${VIDEO_PATHS[node]}?ref=${encodeURIComponent(BRANCH)}`;
 }
 
+function commitsPath(node) {
+  const path = encodeURIComponent(VIDEO_PATHS[node]);
+  return `/repos/${OWNER}/${REPOSITORY}/commits?sha=${encodeURIComponent(BRANCH)}&path=${path}&per_page=1`;
+}
+
 async function loadVideoMetadata(node) {
   try {
     const metadata = await apiRequest(metadataPath(node));
-    state.metadata.set(node, metadata);
-    return metadata;
+    const commits = await apiRequest(commitsPath(node));
+    const enrichedMetadata = {
+      ...metadata,
+      revision: Array.isArray(commits) && commits[0] ? commits[0].sha : BRANCH,
+    };
+    state.metadata.set(node, enrichedMetadata);
+    return enrichedMetadata;
   } catch (error) {
     if (error.status === 404) {
       state.metadata.set(node, null);
@@ -149,8 +159,14 @@ async function loadVideoMetadata(node) {
   }
 }
 
-function setCurrentVideo(metadata) {
-  if (!metadata || !metadata.download_url) {
+function rawVideoUrl(node, revision, contentSha) {
+  const encodedPath = VIDEO_PATHS[node].split("/").map(encodeURIComponent).join("/");
+  const version = encodeURIComponent(contentSha || Date.now());
+  return `https://raw.githubusercontent.com/${OWNER}/${REPOSITORY}/${encodeURIComponent(revision)}/${encodedPath}?v=${version}`;
+}
+
+function setCurrentVideo(metadata, node = state.node) {
+  if (!metadata) {
     elements.currentVideo.removeAttribute("src");
     elements.currentVideo.load();
     elements.currentVideo.hidden = true;
@@ -159,8 +175,10 @@ function setCurrentVideo(metadata) {
     return;
   }
 
-  const separator = metadata.download_url.includes("?") ? "&" : "?";
-  elements.currentVideo.src = `${metadata.download_url}${separator}v=${encodeURIComponent(metadata.sha || Date.now())}`;
+  elements.currentVideo.pause();
+  elements.currentVideo.removeAttribute("src");
+  elements.currentVideo.load();
+  elements.currentVideo.src = rawVideoUrl(node, metadata.revision || BRANCH, metadata.sha);
   elements.currentVideo.hidden = false;
   elements.currentVideoMissing.hidden = true;
   elements.currentVideoInfo.textContent = humanFileSize(metadata.size);
@@ -301,8 +319,12 @@ async function uploadSelectedVideo() {
     });
 
     if (result && result.content) {
-      state.metadata.set(node, result.content);
-      setCurrentVideo(result.content);
+      const uploadedMetadata = {
+        ...result.content,
+        revision: result.commit && result.commit.sha ? result.commit.sha : BRANCH,
+      };
+      state.metadata.set(node, uploadedMetadata);
+      setCurrentVideo(uploadedMetadata, node);
     } else {
       state.metadata.delete(node);
       setCurrentVideo(await loadVideoMetadata(node));
