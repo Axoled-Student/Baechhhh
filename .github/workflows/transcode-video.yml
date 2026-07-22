@@ -33,6 +33,11 @@ jobs:
           ffprobe -version
           jq --version
 
+      - name: Check Pages update permission
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds"
+
   transcode:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
