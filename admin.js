@@ -1,633 +1,443 @@
 "use strict";
 
+const OWNER = "Axoled-Student";
+const REPOSITORY = "Baechhhh";
+const BRANCH = "main";
 const API_ROOT = "https://api.github.com";
 const API_VERSION = "2026-03-10";
-const TOKEN_STORAGE_KEY = "baechhhh-admin-token";
-const REPO_STORAGE_KEY = "baechhhh-admin-repository";
+const TOKEN_STORAGE_KEY = "baechhhh-video-upload-token";
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
-const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 
-const TEXT_EXTENSIONS = new Set([
-  "c", "cc", "cpp", "css", "csv", "h", "hpp", "htm", "html", "ino",
-  "ini", "js", "json", "jsx", "md", "mjs", "py", "scss", "sh", "sql",
-  "svg", "toml", "ts", "tsx", "txt", "xml", "yaml", "yml",
-]);
-const IMAGE_EXTENSIONS = new Set(["avif", "gif", "jpeg", "jpg", "png", "webp"]);
-const VIDEO_EXTENSIONS = new Set(["m4v", "mov", "mp4", "webm"]);
-
-const elements = {
-  authView: document.querySelector("#authView"),
-  authForm: document.querySelector("#authForm"),
-  authError: document.querySelector("#authError"),
-  tokenInput: document.querySelector("#tokenInput"),
-  toggleTokenButton: document.querySelector("#toggleTokenButton"),
-  ownerInput: document.querySelector("#ownerInput"),
-  repoInput: document.querySelector("#repoInput"),
-  branchInput: document.querySelector("#branchInput"),
-  connectButton: document.querySelector("#connectButton"),
-  workspace: document.querySelector("#workspace"),
-  repoLabel: document.querySelector("#repoLabel"),
-  branchLabel: document.querySelector("#branchLabel"),
-  accountAvatar: document.querySelector("#accountAvatar"),
-  accountName: document.querySelector("#accountName"),
-  refreshButton: document.querySelector("#refreshButton"),
-  logoutButton: document.querySelector("#logoutButton"),
-  fileCount: document.querySelector("#fileCount"),
-  fileSearch: document.querySelector("#fileSearch"),
-  fileList: document.querySelector("#fileList"),
-  editorTitle: document.querySelector("#editorTitle"),
-  fileMeta: document.querySelector("#fileMeta"),
-  rawLink: document.querySelector("#rawLink"),
-  emptyEditor: document.querySelector("#emptyEditor"),
-  editorWork: document.querySelector("#editorWork"),
-  textEditor: document.querySelector("#textEditor"),
-  binaryPreview: document.querySelector("#binaryPreview"),
-  videoPreview: document.querySelector("#videoPreview"),
-  imagePreview: document.querySelector("#imagePreview"),
-  editCommitRow: document.querySelector("#editCommitRow"),
-  editCommitMessage: document.querySelector("#editCommitMessage"),
-  saveButton: document.querySelector("#saveButton"),
-  dropZone: document.querySelector("#dropZone"),
-  uploadFileInput: document.querySelector("#uploadFileInput"),
-  selectedUpload: document.querySelector("#selectedUpload"),
-  uploadPath: document.querySelector("#uploadPath"),
-  uploadCommitMessage: document.querySelector("#uploadCommitMessage"),
-  uploadButton: document.querySelector("#uploadButton"),
-  uploadProgress: document.querySelector("#uploadProgress"),
-  uploadProgressText: document.querySelector("#uploadProgressText"),
-  toast: document.querySelector("#toast"),
-  confirmDialog: document.querySelector("#confirmDialog"),
-  confirmTitle: document.querySelector("#confirmTitle"),
-  confirmText: document.querySelector("#confirmText"),
-  cancelConfirmButton: document.querySelector("#cancelConfirmButton"),
-  confirmActionButton: document.querySelector("#confirmActionButton"),
+const VIDEO_PATHS = {
+  1: "assets/videos/node-1.mp4",
+  2: "assets/videos/node-2.mp4",
+  3: "assets/videos/node-3.mp4",
 };
 
 const state = {
   token: "",
-  owner: "Axoled-Student",
-  repo: "Baechhhh",
-  branch: "main",
-  files: [],
-  filesByPath: new Map(),
-  currentFile: null,
-  selectedUpload: null,
-  toastTimer: null,
+  node: 1,
+  selectedFile: null,
+  selectedPreviewUrl: "",
+  metadata: new Map(),
+  busy: false,
 };
 
-class GitHubApiError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.name = "GitHubApiError";
-    this.status = status;
+const elements = {
+  bootScreen: document.querySelector("#bootScreen"),
+  tokenScreen: document.querySelector("#tokenScreen"),
+  managerScreen: document.querySelector("#managerScreen"),
+  tokenForm: document.querySelector("#tokenForm"),
+  tokenInput: document.querySelector("#tokenInput"),
+  saveTokenButton: document.querySelector("#saveTokenButton"),
+  tokenMessage: document.querySelector("#tokenMessage"),
+  changeTokenButton: document.querySelector("#changeTokenButton"),
+  currentNodeLabel: document.querySelector("#currentNodeLabel"),
+  currentVideoInfo: document.querySelector("#currentVideoInfo"),
+  currentVideo: document.querySelector("#currentVideo"),
+  currentVideoMissing: document.querySelector("#currentVideoMissing"),
+  videoFileInput: document.querySelector("#videoFileInput"),
+  selectedFileName: document.querySelector("#selectedFileName"),
+  newVideoPanel: document.querySelector("#newVideoPanel"),
+  newVideo: document.querySelector("#newVideo"),
+  uploadSummary: document.querySelector("#uploadSummary"),
+  uploadButton: document.querySelector("#uploadButton"),
+  uploadMessage: document.querySelector("#uploadMessage"),
+  nodeInputs: Array.from(document.querySelectorAll('input[name="node"]')),
+};
+
+function showOnly(screen) {
+  elements.bootScreen.hidden = screen !== "boot";
+  elements.tokenScreen.hidden = screen !== "token";
+  elements.managerScreen.hidden = screen !== "manager";
+}
+
+function setMessage(element, text, kind = "info") {
+  element.textContent = text;
+  element.dataset.kind = kind;
+  element.hidden = !text;
+}
+
+function friendlyError(error) {
+  if (error && error.status === 401) {
+    return "Token 無效或已過期，請輸入新的 Token。";
   }
-}
-
-function encodePath(path) {
-  return path.split("/").map(encodeURIComponent).join("/");
-}
-
-function fileExtension(path) {
-  const name = path.split("/").pop() || "";
-  const dot = name.lastIndexOf(".");
-  return dot === -1 ? "" : name.slice(dot + 1).toLowerCase();
-}
-
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes < 0) return "未知大小";
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ["KB", "MB", "GB"];
-  let size = bytes / 1024;
-  let unit = units[0];
-  for (let index = 1; index < units.length && size >= 1024; index += 1) {
-    size /= 1024;
-    unit = units[index];
+  if (error && error.status === 403) {
+    return "這個 Token 沒有上傳權限。請確認已授權此網站的 Contents：Read and write。";
   }
-  return `${size.toFixed(size >= 10 ? 1 : 2)} ${unit}`;
+  if (error && error.status === 409) {
+    return "影片剛被其他人更新，請再按一次上傳。";
+  }
+  if (error && error.status === 422) {
+    return "GitHub 無法接受這個檔案。請確認是 MP4，且檔案小於 100 MB。";
+  }
+  if (error instanceof TypeError) {
+    return "目前無法連上 GitHub，請檢查網路後再試一次。";
+  }
+  return error && error.message ? error.message : "發生問題，請稍後再試。";
 }
 
-function rawFileUrl(path) {
-  const encodedBranch = encodeURIComponent(state.branch);
-  return `https://raw.githubusercontent.com/${encodeURIComponent(state.owner)}/${encodeURIComponent(state.repo)}/${encodedBranch}/${encodePath(path)}`;
+function createApiError(response, data) {
+  const error = new Error(data && data.message ? data.message : `GitHub 回傳 ${response.status}`);
+  error.status = response.status;
+  return error;
 }
 
-function showToast(message, isError = false) {
-  window.clearTimeout(state.toastTimer);
-  elements.toast.textContent = message;
-  elements.toast.classList.toggle("error", isError);
-  elements.toast.classList.add("show");
-  state.toastTimer = window.setTimeout(() => elements.toast.classList.remove("show"), 3600);
-}
+async function apiRequest(path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  headers.set("Accept", "application/vnd.github+json");
+  headers.set("Authorization", `Bearer ${state.token}`);
+  headers.set("X-GitHub-Api-Version", API_VERSION);
 
-function setBusy(button, busy, busyLabel, idleLabel) {
-  button.disabled = busy;
-  button.textContent = busy ? busyLabel : idleLabel;
-}
-
-async function githubRequest(path, options = {}) {
-  const headers = new Headers({
-    Accept: options.accept || "application/vnd.github+json",
-    Authorization: `Bearer ${state.token}`,
-    "X-GitHub-Api-Version": API_VERSION,
-  });
-
-  if (options.body !== undefined) headers.set("Content-Type", "application/json");
+  if (options.body) {
+    headers.set("Content-Type", "application/json");
+  }
 
   const response = await fetch(`${API_ROOT}${path}`, {
     method: options.method || "GET",
     headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body: options.body,
     cache: "no-store",
   });
 
+  const text = await response.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: text };
+    }
+  }
+
   if (!response.ok) {
-    let message = `GitHub API 回傳 ${response.status}`;
-    try {
-      const payload = await response.json();
-      if (payload?.message) message = payload.message;
-    } catch {
-      // Keep the status-based fallback. Never include request headers or token.
-    }
-    throw new GitHubApiError(response.status, message);
+    throw createApiError(response, data);
   }
 
-  return response;
+  return data;
 }
 
-async function githubJson(path, options = {}) {
-  const response = await githubRequest(path, options);
-  if (response.status === 204) return null;
-  return response.json();
+async function verifyToken() {
+  await apiRequest(`/repos/${OWNER}/${REPOSITORY}`);
 }
 
-function saveRepositoryPreference() {
+function humanFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "大小未知";
+  }
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+  return `${Math.ceil(bytes / 1024)} KB`;
+}
+
+function metadataPath(node) {
+  return `/repos/${OWNER}/${REPOSITORY}/contents/${VIDEO_PATHS[node]}?ref=${encodeURIComponent(BRANCH)}`;
+}
+
+async function loadVideoMetadata(node) {
   try {
-    localStorage.setItem(REPO_STORAGE_KEY, JSON.stringify({
-      owner: state.owner,
-      repo: state.repo,
-      branch: state.branch,
-    }));
-  } catch {
-    // Repository fields are only a convenience; storage can be unavailable.
-  }
-}
-
-function loadRepositoryPreference() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(REPO_STORAGE_KEY) || "null");
-    if (!saved) return;
-    if (typeof saved.owner === "string") elements.ownerInput.value = saved.owner;
-    if (typeof saved.repo === "string") elements.repoInput.value = saved.repo;
-    if (typeof saved.branch === "string") elements.branchInput.value = saved.branch;
-  } catch {
-    localStorage.removeItem(REPO_STORAGE_KEY);
-  }
-}
-
-async function loadFiles() {
-  elements.fileList.replaceChildren();
-  const loading = document.createElement("p");
-  loading.className = "list-message";
-  loading.textContent = "正在讀取 GitHub 檔案…";
-  elements.fileList.append(loading);
-
-  const branch = encodeURIComponent(state.branch);
-  const payload = await githubJson(
-    `/repos/${encodeURIComponent(state.owner)}/${encodeURIComponent(state.repo)}/git/trees/${branch}?recursive=1`,
-  );
-
-  state.files = (payload.tree || [])
-    .filter((item) => item.type === "blob")
-    .sort((a, b) => a.path.localeCompare(b.path, "zh-Hant"));
-  state.filesByPath = new Map(state.files.map((file) => [file.path, file]));
-  elements.fileCount.textContent = String(state.files.length);
-  renderFileList();
-
-  if (payload.truncated) {
-    showToast("倉庫檔案很多，GitHub 只回傳了部分清單。", true);
-  }
-}
-
-function renderFileList() {
-  const query = elements.fileSearch.value.trim().toLowerCase();
-  const visible = query
-    ? state.files.filter((file) => file.path.toLowerCase().includes(query))
-    : state.files;
-
-  const fragment = document.createDocumentFragment();
-  for (const file of visible) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "file-item";
-    button.setAttribute("role", "option");
-    button.dataset.path = file.path;
-    if (state.currentFile?.path === file.path) {
-      button.classList.add("selected");
-      button.setAttribute("aria-selected", "true");
+    const metadata = await apiRequest(metadataPath(node));
+    state.metadata.set(node, metadata);
+    return metadata;
+  } catch (error) {
+    if (error.status === 404) {
+      state.metadata.set(node, null);
+      return null;
     }
-
-    const path = document.createElement("strong");
-    path.textContent = file.path;
-    const meta = document.createElement("small");
-    meta.textContent = formatBytes(file.size);
-    button.append(path, meta);
-    fragment.append(button);
-  }
-
-  elements.fileList.replaceChildren(fragment);
-  if (visible.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "list-message";
-    empty.textContent = query ? "沒有符合的檔案。" : "這個 branch 沒有檔案。";
-    elements.fileList.append(empty);
+    throw error;
   }
 }
 
-function resetPreview() {
-  elements.videoPreview.pause();
-  elements.videoPreview.removeAttribute("src");
-  elements.videoPreview.load();
-  elements.videoPreview.hidden = true;
-  elements.imagePreview.removeAttribute("src");
-  elements.imagePreview.hidden = true;
-}
-
-async function openFile(file) {
-  state.currentFile = file;
-  renderFileList();
-  resetPreview();
-
-  elements.emptyEditor.hidden = true;
-  elements.editorWork.hidden = false;
-  elements.editorTitle.textContent = file.path;
-  elements.fileMeta.textContent = `${formatBytes(file.size)} · ${file.sha.slice(0, 9)}`;
-  elements.rawLink.href = rawFileUrl(file.path);
-  elements.rawLink.hidden = false;
-  elements.editCommitMessage.value = `Update ${file.path}`;
-  elements.uploadPath.value = file.path;
-  elements.uploadCommitMessage.value = `Replace ${file.path}`;
-
-  const extension = fileExtension(file.path);
-  const isText = TEXT_EXTENSIONS.has(extension) && file.size <= MAX_TEXT_BYTES;
-
-  if (isText) {
-    elements.textEditor.hidden = false;
-    elements.binaryPreview.hidden = true;
-    elements.editCommitRow.hidden = false;
-    elements.textEditor.value = "正在載入…";
-    elements.textEditor.disabled = true;
-
-    try {
-      const response = await githubRequest(
-        `/repos/${encodeURIComponent(state.owner)}/${encodeURIComponent(state.repo)}/contents/${encodePath(file.path)}?ref=${encodeURIComponent(state.branch)}`,
-        { accept: "application/vnd.github.raw+json" },
-      );
-      elements.textEditor.value = await response.text();
-      elements.textEditor.disabled = false;
-      elements.textEditor.focus();
-    } catch (error) {
-      elements.textEditor.value = "";
-      showToast(`載入失敗：${friendlyError(error)}`, true);
-    }
+function setCurrentVideo(metadata) {
+  if (!metadata || !metadata.download_url) {
+    elements.currentVideo.removeAttribute("src");
+    elements.currentVideo.load();
+    elements.currentVideo.hidden = true;
+    elements.currentVideoMissing.hidden = false;
+    elements.currentVideoInfo.textContent = "尚未上傳";
     return;
   }
 
-  elements.textEditor.hidden = true;
-  elements.binaryPreview.hidden = false;
-  elements.editCommitRow.hidden = true;
+  const separator = metadata.download_url.includes("?") ? "&" : "?";
+  elements.currentVideo.src = `${metadata.download_url}${separator}v=${encodeURIComponent(metadata.sha || Date.now())}`;
+  elements.currentVideo.hidden = false;
+  elements.currentVideoMissing.hidden = true;
+  elements.currentVideoInfo.textContent = humanFileSize(metadata.size);
+  elements.currentVideo.load();
+}
 
-  const previewUrl = rawFileUrl(file.path);
-  if (VIDEO_EXTENSIONS.has(extension)) {
-    elements.videoPreview.src = previewUrl;
-    elements.videoPreview.hidden = false;
-  } else if (IMAGE_EXTENSIONS.has(extension)) {
-    elements.imagePreview.src = previewUrl;
-    elements.imagePreview.hidden = false;
+function updateNodeText() {
+  elements.currentNodeLabel.textContent = String(state.node);
+  elements.uploadSummary.textContent = `新影片會替換「影片 ${state.node}」。`;
+  elements.uploadButton.textContent = state.busy
+    ? `正在上傳影片 ${state.node}…`
+    : `上傳並替換影片 ${state.node}`;
+}
+
+function clearSelectedFile() {
+  if (state.selectedPreviewUrl) {
+    URL.revokeObjectURL(state.selectedPreviewUrl);
   }
+  state.selectedFile = null;
+  state.selectedPreviewUrl = "";
+  elements.videoFileInput.value = "";
+  elements.selectedFileName.textContent = "尚未選擇影片";
+  elements.newVideo.removeAttribute("src");
+  elements.newVideo.load();
+  elements.newVideoPanel.hidden = true;
+  elements.uploadButton.disabled = true;
 }
 
-function friendlyError(error) {
-  if (!(error instanceof GitHubApiError)) return "網路連線失敗，請稍後重試。";
-  if (error.status === 401) return "Token 無效或已過期。";
-  if (error.status === 403) return `權限不足：${error.message}`;
-  if (error.status === 404) return "找不到 repository、branch 或檔案，請檢查 token 權限。";
-  if (error.status === 409) return "檔案已被其他提交更新，請重新整理後再試。";
-  if (error.status === 413 || error.status === 422) return `GitHub 拒絕這次寫入：${error.message}`;
-  return error.message;
-}
+async function selectNode(node) {
+  state.node = node;
+  clearSelectedFile();
+  setMessage(elements.uploadMessage, "");
+  updateNodeText();
 
-function bytesToBase64(bytes) {
-  const chunkSize = 0x8000;
-  const chunks = [];
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    const chunk = bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length));
-    let binary = "";
-    for (let index = 0; index < chunk.length; index += 1) {
-      binary += String.fromCharCode(chunk[index]);
-    }
-    chunks.push(binary);
+  elements.currentVideoInfo.textContent = "讀取中…";
+  const cached = state.metadata.get(node);
+  if (cached !== undefined) {
+    setCurrentVideo(cached);
+    return;
   }
-  return btoa(chunks.join(""));
-}
 
-function normalizeRepositoryPath(path) {
-  return path
-    .trim()
-    .replaceAll("\\", "/")
-    .replace(/^\/+/, "")
-    .replace(/\/{2,}/g, "/");
-}
-
-function validRepositoryPath(path) {
-  return path && !path.endsWith("/") && !path.split("/").some((part) => part === ".." || part === ".");
-}
-
-function confirmCommit(title, text) {
-  return new Promise((resolve) => {
-    elements.confirmTitle.textContent = title;
-    elements.confirmText.textContent = text;
-    elements.confirmDialog.addEventListener("close", () => {
-      resolve(elements.confirmDialog.returnValue === "confirm");
-    }, { once: true });
-    elements.confirmDialog.showModal();
-  });
-}
-
-async function saveCurrentText() {
-  if (!state.currentFile || elements.textEditor.hidden || elements.textEditor.disabled) return;
-
-  const message = elements.editCommitMessage.value.trim() || `Update ${state.currentFile.path}`;
-  const confirmed = await confirmCommit(
-    "確認儲存文字檔？",
-    `${state.currentFile.path} 將寫入 ${state.branch}，commit 訊息為「${message}」。`,
-  );
-  if (!confirmed) return;
-
-  setBusy(elements.saveButton, true, "正在儲存…", "儲存到 GitHub");
   try {
-    const bytes = new TextEncoder().encode(elements.textEditor.value);
-    const result = await githubJson(
-      `/repos/${encodeURIComponent(state.owner)}/${encodeURIComponent(state.repo)}/contents/${encodePath(state.currentFile.path)}`,
-      {
-        method: "PUT",
-        body: {
-          message,
-          content: bytesToBase64(bytes),
-          branch: state.branch,
-          sha: state.currentFile.sha,
-        },
-      },
-    );
-
-    state.currentFile.sha = result.content.sha;
-    state.currentFile.size = bytes.length;
-    state.filesByPath.set(state.currentFile.path, state.currentFile);
-    elements.fileMeta.textContent = `${formatBytes(bytes.length)} · ${result.content.sha.slice(0, 9)}`;
-    renderFileList();
-    showToast("已建立 commit 並儲存到 GitHub。");
+    setCurrentVideo(await loadVideoMetadata(node));
   } catch (error) {
-    showToast(`儲存失敗：${friendlyError(error)}`, true);
-  } finally {
-    setBusy(elements.saveButton, false, "正在儲存…", "儲存到 GitHub");
+    elements.currentVideoInfo.textContent = "無法讀取";
+    setMessage(elements.uploadMessage, friendlyError(error), "error");
   }
 }
 
-function chooseUpload(file) {
-  state.selectedUpload = file || null;
+function validateVideo(file) {
   if (!file) {
-    elements.selectedUpload.textContent = "尚未選擇檔案";
-    elements.uploadButton.disabled = true;
-    return;
+    throw new Error("請先選擇一個 MP4 影片。 ");
   }
-
-  elements.selectedUpload.textContent = `${file.name} · ${formatBytes(file.size)}`;
-  if (!elements.uploadPath.value.trim() || !state.currentFile) {
-    elements.uploadPath.value = file.name;
+  if (!file.name.toLowerCase().endsWith(".mp4")) {
+    throw new Error("請選擇副檔名為 .mp4 的影片。 ");
   }
-  elements.uploadCommitMessage.value = state.filesByPath.has(elements.uploadPath.value.trim())
-    ? `Replace ${elements.uploadPath.value.trim()}`
-    : `Upload ${elements.uploadPath.value.trim() || file.name}`;
-  elements.uploadButton.disabled = file.size > MAX_FILE_BYTES;
-
+  if (file.size <= 0) {
+    throw new Error("這個影片是空的，請重新選擇。 ");
+  }
   if (file.size > MAX_FILE_BYTES) {
-    showToast("此檔案超過 GitHub API 的 100 MB 上限。", true);
+    throw new Error("影片超過 100 MB，請先壓縮再上傳。 ");
   }
 }
 
-async function uploadSelectedFile() {
-  const file = state.selectedUpload;
-  const path = normalizeRepositoryPath(elements.uploadPath.value);
-  if (!file) return;
-  if (!validRepositoryPath(path)) {
-    showToast("請輸入有效的 GitHub 檔案路徑。", true);
-    return;
-  }
-  if (file.size > MAX_FILE_BYTES) {
-    showToast("檔案超過 100 MB，無法使用 GitHub API 上傳。", true);
+function chooseFile(file) {
+  try {
+    validateVideo(file);
+  } catch (error) {
+    clearSelectedFile();
+    setMessage(elements.uploadMessage, error.message.trim(), "error");
     return;
   }
 
-  const existing = state.filesByPath.get(path);
-  const message = elements.uploadCommitMessage.value.trim() || `${existing ? "Replace" : "Upload"} ${path}`;
-  const confirmed = await confirmCommit(
-    existing ? "確認取代檔案？" : "確認上傳檔案？",
-    `${path}（${formatBytes(file.size)}）將寫入 ${state.branch}，commit 訊息為「${message}」。`,
-  );
-  if (!confirmed) return;
+  if (state.selectedPreviewUrl) {
+    URL.revokeObjectURL(state.selectedPreviewUrl);
+  }
 
-  setBusy(elements.uploadButton, true, "正在上傳…", "上傳到 GitHub");
-  elements.uploadProgress.hidden = false;
-  elements.uploadProgressText.textContent = "正在讀取並編碼檔案…";
+  state.selectedFile = file;
+  state.selectedPreviewUrl = URL.createObjectURL(file);
+  elements.selectedFileName.textContent = `${file.name} · ${humanFileSize(file.size)}`;
+  elements.newVideo.src = state.selectedPreviewUrl;
+  elements.newVideoPanel.hidden = false;
+  elements.newVideo.load();
+  elements.uploadButton.disabled = false;
+  setMessage(elements.uploadMessage, "");
+}
+
+function bytesToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 32768;
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function setBusy(busy) {
+  state.busy = busy;
+  elements.nodeInputs.forEach((input) => {
+    input.disabled = busy;
+  });
+  elements.videoFileInput.disabled = busy;
+  elements.changeTokenButton.disabled = busy;
+  elements.uploadButton.disabled = busy || !state.selectedFile;
+  updateNodeText();
+}
+
+async function uploadSelectedVideo() {
+  if (state.busy || !state.selectedFile) {
+    return;
+  }
+
+  const node = state.node;
+  const file = state.selectedFile;
 
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    elements.uploadProgressText.textContent = "正在傳送到 GitHub，請勿關閉分頁…";
+    validateVideo(file);
+    setBusy(true);
+    setMessage(elements.uploadMessage, "正在準備影片，請不要關閉此頁…");
+
+    const latestMetadata = await loadVideoMetadata(node);
+    const content = bytesToBase64(await file.arrayBuffer());
     const body = {
-      message,
-      content: bytesToBase64(bytes),
-      branch: state.branch,
+      message: `Replace video ${node}`,
+      content,
+      branch: BRANCH,
     };
-    if (existing) body.sha = existing.sha;
 
-    await githubJson(
-      `/repos/${encodeURIComponent(state.owner)}/${encodeURIComponent(state.repo)}/contents/${encodePath(path)}`,
-      { method: "PUT", body },
+    if (latestMetadata && latestMetadata.sha) {
+      body.sha = latestMetadata.sha;
+    }
+
+    setMessage(elements.uploadMessage, "正在上傳到 GitHub，較大的影片會需要幾分鐘…");
+    const result = await apiRequest(metadataPath(node).split("?ref=")[0], {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+
+    if (result && result.content) {
+      state.metadata.set(node, result.content);
+      setCurrentVideo(result.content);
+    } else {
+      state.metadata.delete(node);
+      setCurrentVideo(await loadVideoMetadata(node));
+    }
+
+    clearSelectedFile();
+    setMessage(
+      elements.uploadMessage,
+      `影片 ${node} 已上傳完成。牆內 iPad 最晚約 5 分鐘會自動更新。`,
+      "success",
     );
-
-    elements.uploadProgressText.textContent = "上傳完成，正在更新清單…";
-    await loadFiles();
-    chooseUpload(null);
-    elements.uploadFileInput.value = "";
-    showToast(existing ? "檔案已取代並建立 commit。" : "檔案已上傳並建立 commit。");
-    const uploaded = state.filesByPath.get(path);
-    if (uploaded) await openFile(uploaded);
   } catch (error) {
-    showToast(`上傳失敗：${friendlyError(error)}`, true);
+    if (error.status === 401) {
+      forgetToken();
+      showTokenScreen(friendlyError(error));
+      return;
+    }
+    setMessage(elements.uploadMessage, friendlyError(error), "error");
   } finally {
-    setBusy(elements.uploadButton, false, "正在上傳…", "上傳到 GitHub");
-    elements.uploadButton.disabled = !state.selectedUpload || state.selectedUpload.size > MAX_FILE_BYTES;
-    elements.uploadProgress.hidden = true;
+    setBusy(false);
   }
 }
 
-async function connect() {
-  const token = elements.tokenInput.value.trim();
-  const owner = elements.ownerInput.value.trim();
-  const repo = elements.repoInput.value.trim();
-  const branch = elements.branchInput.value.trim();
-  if (!token || !owner || !repo || !branch) return;
-
-  state.token = token;
-  state.owner = owner;
-  state.repo = repo;
-  state.branch = branch;
-  elements.authError.textContent = "";
-  setBusy(elements.connectButton, true, "正在驗證…", "驗證並開啟管理頁");
-
-  try {
-    const repository = await githubJson(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`);
-    let account = null;
-    try {
-      account = await githubJson("/user");
-    } catch {
-      // Repository-scoped tokens can still work even if profile access is unavailable.
-    }
-
-    await loadFiles();
-    try {
-      sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
-    } catch {
-      // The in-memory token still works when browser storage is unavailable.
-    }
-    saveRepositoryPreference();
-    elements.repoLabel.textContent = repository.full_name;
-    elements.branchLabel.textContent = branch;
-    elements.accountName.textContent = account?.login || "Token 已驗證";
-    elements.accountAvatar.src = account?.avatar_url || "";
-    elements.accountAvatar.hidden = !account?.avatar_url;
-    elements.tokenInput.value = "";
-    elements.authView.hidden = true;
-    elements.workspace.hidden = false;
-    showToast("已安全連接 GitHub。");
-  } catch (error) {
-    state.token = "";
-    try {
-      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
-    } catch {
-      // Nothing else is required when browser storage is unavailable.
-    }
-    elements.workspace.hidden = true;
-    elements.authView.hidden = false;
-    elements.authError.textContent = friendlyError(error);
-  } finally {
-    setBusy(elements.connectButton, false, "正在驗證…", "驗證並開啟管理頁");
-  }
+function saveTokenLocally(token) {
+  localStorage.setItem(TOKEN_STORAGE_KEY, token);
 }
 
-function logout() {
-  state.token = "";
-  state.files = [];
-  state.filesByPath.clear();
-  state.currentFile = null;
-  state.selectedUpload = null;
+function readSavedToken() {
   try {
-    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    return localStorage.getItem(TOKEN_STORAGE_KEY) || "";
   } catch {
-    // The in-memory token is cleared above.
+    return "";
   }
-  resetPreview();
-  elements.workspace.hidden = true;
-  elements.authView.hidden = false;
-  elements.authError.textContent = "";
+}
+
+function forgetToken() {
+  state.token = "";
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+  } catch {
+    // The in-memory token is still cleared when browser storage is unavailable.
+  }
+}
+
+function showTokenScreen(message = "") {
+  showOnly("token");
   elements.tokenInput.value = "";
   elements.tokenInput.focus();
-  showToast("Token 已從此分頁清除。");
+  setMessage(elements.tokenMessage, message, message ? "error" : "info");
 }
 
-elements.authForm.addEventListener("submit", (event) => {
+async function openManager() {
+  showOnly("manager");
+  updateNodeText();
+  await selectNode(state.node);
+
+  Promise.all([1, 2, 3].filter((node) => node !== state.node).map(loadVideoMetadata)).catch(() => {
+    // Other slots will retry when the user selects them.
+  });
+}
+
+async function handleTokenSubmit(event) {
   event.preventDefault();
-  connect();
-});
+  const token = elements.tokenInput.value.trim();
+  if (!token) {
+    setMessage(elements.tokenMessage, "請貼上 GitHub Token。", "error");
+    return;
+  }
 
-elements.toggleTokenButton.addEventListener("click", () => {
-  const visible = elements.tokenInput.type === "text";
-  elements.tokenInput.type = visible ? "password" : "text";
-  elements.toggleTokenButton.textContent = visible ? "顯示" : "隱藏";
-});
+  state.token = token;
+  elements.saveTokenButton.disabled = true;
+  elements.saveTokenButton.textContent = "正在確認…";
+  setMessage(elements.tokenMessage, "正在連接 GitHub…");
 
-elements.fileSearch.addEventListener("input", renderFileList);
-elements.fileList.addEventListener("click", (event) => {
-  const button = event.target.closest(".file-item");
-  if (!button) return;
-  const file = state.filesByPath.get(button.dataset.path);
-  if (file) openFile(file);
-});
-
-elements.refreshButton.addEventListener("click", async () => {
-  setBusy(elements.refreshButton, true, "更新中…", "重新整理");
   try {
-    await loadFiles();
-    showToast("檔案清單已更新。");
+    await verifyToken();
+    try {
+      saveTokenLocally(token);
+    } catch {
+      setMessage(elements.tokenMessage, "瀏覽器無法記住 Token，但這次仍可繼續使用。", "error");
+    }
+    await openManager();
   } catch (error) {
-    showToast(`更新失敗：${friendlyError(error)}`, true);
+    forgetToken();
+    setMessage(elements.tokenMessage, friendlyError(error), "error");
   } finally {
-    setBusy(elements.refreshButton, false, "更新中…", "重新整理");
+    elements.saveTokenButton.disabled = false;
+    elements.saveTokenButton.textContent = "儲存並開始";
   }
+}
+
+async function initialize() {
+  const savedToken = readSavedToken();
+  if (!savedToken) {
+    showTokenScreen();
+    return;
+  }
+
+  state.token = savedToken;
+  showOnly("boot");
+  try {
+    await verifyToken();
+    await openManager();
+  } catch (error) {
+    forgetToken();
+    showTokenScreen(friendlyError(error));
+  }
+}
+
+elements.tokenForm.addEventListener("submit", handleTokenSubmit);
+
+elements.changeTokenButton.addEventListener("click", () => {
+  forgetToken();
+  clearSelectedFile();
+  showTokenScreen();
 });
 
-elements.logoutButton.addEventListener("click", logout);
-elements.saveButton.addEventListener("click", saveCurrentText);
-elements.uploadButton.addEventListener("click", uploadSelectedFile);
-elements.uploadFileInput.addEventListener("change", () => chooseUpload(elements.uploadFileInput.files[0]));
-elements.cancelConfirmButton.addEventListener("click", () => elements.confirmDialog.close("cancel"));
-elements.confirmActionButton.addEventListener("click", () => elements.confirmDialog.close("confirm"));
-
-for (const eventName of ["dragenter", "dragover"]) {
-  elements.dropZone.addEventListener(eventName, (event) => {
-    event.preventDefault();
-    elements.dropZone.classList.add("dragging");
+elements.nodeInputs.forEach((input) => {
+  input.addEventListener("change", () => {
+    if (input.checked) {
+      selectNode(Number(input.value));
+    }
   });
-}
-
-for (const eventName of ["dragleave", "drop"]) {
-  elements.dropZone.addEventListener(eventName, (event) => {
-    event.preventDefault();
-    elements.dropZone.classList.remove("dragging");
-  });
-}
-
-elements.dropZone.addEventListener("drop", (event) => {
-  const file = event.dataTransfer?.files?.[0];
-  if (file) chooseUpload(file);
 });
 
-elements.uploadPath.addEventListener("input", () => {
-  if (!state.selectedUpload) return;
-  const path = normalizeRepositoryPath(elements.uploadPath.value);
-  elements.uploadCommitMessage.value = `${state.filesByPath.has(path) ? "Replace" : "Upload"} ${path || state.selectedUpload.name}`;
+elements.videoFileInput.addEventListener("change", () => {
+  chooseFile(elements.videoFileInput.files && elements.videoFileInput.files[0]);
 });
 
-elements.textEditor.addEventListener("keydown", (event) => {
-  if (event.key === "Tab") {
-    event.preventDefault();
-    const start = elements.textEditor.selectionStart;
-    const end = elements.textEditor.selectionEnd;
-    elements.textEditor.setRangeText("  ", start, end, "end");
-  }
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-    event.preventDefault();
-    saveCurrentText();
+elements.uploadButton.addEventListener("click", uploadSelectedVideo);
+
+window.addEventListener("beforeunload", () => {
+  if (state.selectedPreviewUrl) {
+    URL.revokeObjectURL(state.selectedPreviewUrl);
   }
 });
 
-loadRepositoryPreference();
-let sessionToken = "";
-try {
-  sessionToken = sessionStorage.getItem(TOKEN_STORAGE_KEY) || "";
-} catch {
-  sessionToken = "";
-}
-if (sessionToken) {
-  elements.tokenInput.value = sessionToken;
-  connect();
-}
+initialize();
