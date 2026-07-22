@@ -13,9 +13,13 @@ const stage = document.querySelector(".stage");
 const mainVideo = document.querySelector("#mainVideo");
 const connection = document.querySelector(".connection");
 const connectionText = document.querySelector("#connectionText");
+const soundSetup = document.querySelector("#soundSetup");
+const enableSoundButton = document.querySelector("#enableSoundButton");
+const soundError = document.querySelector("#soundError");
 
 let currentNode = 0;
 let idleTimer = null;
+let soundUnlocked = false;
 
 function setConnection(state, label) {
   connection.classList.toggle("connected", state === "connected");
@@ -31,13 +35,19 @@ async function showNode(node) {
   currentNode = node;
   stage.classList.remove("finished");
   mainVideo.src = selected.src;
+  mainVideo.muted = !soundUnlocked;
+  mainVideo.volume = 1;
   mainVideo.load();
   stage.classList.add("has-video");
   document.body.classList.add("video-playing");
   try {
     await mainVideo.play();
   } catch {
-    window.setTimeout(() => mainVideo.play().catch(() => {}), 1000);
+    soundUnlocked = false;
+    mainVideo.muted = true;
+    soundSetup.classList.remove("hidden");
+    soundError.textContent = "瀏覽器需要重新啟用聲音。";
+    mainVideo.play().catch(() => {});
   }
 }
 
@@ -59,6 +69,44 @@ function showFinished() {
 }
 
 mainVideo.addEventListener("ended", showFinished);
+
+async function enableSound() {
+  enableSoundButton.disabled = true;
+  enableSoundButton.textContent = "正在開啟…";
+  soundError.textContent = "";
+
+  try {
+    const wasPlaying = currentNode !== 0 && !mainVideo.paused;
+
+    if (wasPlaying) {
+      mainVideo.muted = false;
+      mainVideo.volume = 1;
+      await mainVideo.play();
+    } else {
+      mainVideo.src = videos[1].src;
+      mainVideo.muted = false;
+      mainVideo.volume = 1;
+      await mainVideo.play();
+      mainVideo.pause();
+      mainVideo.currentTime = 0;
+      mainVideo.removeAttribute("src");
+      mainVideo.load();
+    }
+
+    soundUnlocked = true;
+    soundSetup.classList.add("hidden");
+  } catch (error) {
+    console.error("Sound unlock failed:", error);
+    soundUnlocked = false;
+    mainVideo.muted = true;
+    soundError.textContent = "無法開啟聲音，請確認 iPad 音量後再試一次。";
+  } finally {
+    enableSoundButton.disabled = false;
+    enableSoundButton.textContent = "開啟聲音並開始體驗";
+  }
+}
+
+enableSoundButton.addEventListener("click", enableSound);
 
 function handleControlMessage(rawMessage) {
   const [action, rawNode] = rawMessage.trim().toUpperCase().split("|");

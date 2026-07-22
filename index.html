@@ -11,6 +11,17 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <section class="sound-setup" id="soundSetup" aria-labelledby="soundTitle">
+      <div class="sound-panel">
+        <div class="speaker-mark" aria-hidden="true"><i></i><i></i></div>
+        <p class="sound-label">展示前設定</p>
+        <h2 id="soundTitle">開啟影片聲音</h2>
+        <span>工作人員請先點一次，之後 ESP32 觸發的影片都會自動播放聲音。</span>
+        <button id="enableSoundButton" type="button">開啟聲音並開始體驗</button>
+        <small id="soundError" aria-live="polite"></small>
+      </div>
+    </section>
+
     <main class="shell">
       <header class="topbar">
         <div class="welcome">

@@ -44,6 +44,8 @@ arduino-cli compile --fqbn esp32:esp32:esp32 .
 
 完整的 GitHub 上傳、FFmpeg 轉檔、網站文字修改與 iPad 全螢幕設定，請見 [`VIDEO_GUIDE.md`](VIDEO_GUIDE.md)。
 
+每次 iPad Web App 開啟或重新載入後，工作人員需先點一次「開啟聲音並開始體驗」。這個使用者手勢會解鎖瀏覽器的有聲播放權限；之後 ESP32 觸發不需再碰螢幕。
+
 網站第一次在 iPad Safari 開啟時，會在背景把三支影片存進裝置快取。固定展示期間不需要觸控操作；網頁每五分鐘檢查網站與影片是否更新。
 
 ## 放置感應板塊
