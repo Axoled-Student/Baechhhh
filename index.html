@@ -3,161 +3,76 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#07111f" />
+    <meta name="theme-color" content="#080d14" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>Baechhhh｜ESP32 影片節點</title>
-    <meta
-      name="description"
-      content="由 ESP32 即時切換三個影片節點的平板控制頁面。"
-    />
+    <title>感應影音牆</title>
+    <meta name="description" content="放置感應板塊，即刻欣賞專屬影片。" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="shell">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">ESP32 LIVE VIDEO</p>
-          <h1>三節點影片控制台</h1>
+        <div class="brand">
+          <p class="eyebrow">INTERACTIVE EXPERIENCE</p>
+          <h1>感應影音牆</h1>
         </div>
-        <div class="status-group">
-          <div class="connection" aria-live="polite">
-            <span class="status-dot" id="statusDot"></span>
-            <span id="connectionText">正在連線…</span>
-          </div>
-          <button class="cache-status" id="cacheButton" type="button">
-            <span class="cache-dot" aria-hidden="true"></span>
-            <span id="cacheText" aria-live="polite">影片快取準備中…</span>
-          </button>
+        <div class="connection" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="connectionText">系統連線中</span>
         </div>
       </header>
 
-      <section class="stage" aria-label="目前播放影片">
+      <section class="tutorial" aria-labelledby="tutorialHeading">
+        <div class="tutorial-intro">
+          <p class="eyebrow">HOW TO EXPERIENCE</p>
+          <h2 id="tutorialHeading">放上板塊，影片即刻播放</h2>
+        </div>
+
+        <ol class="steps">
+          <li>
+            <span>1</span>
+            <div><strong>選一塊</strong><small>一次選擇一塊板塊</small></div>
+          </li>
+          <li>
+            <span>2</span>
+            <div><strong>平放感應區</strong><small>讓板塊完整貼合</small></div>
+          </li>
+          <li>
+            <span>3</span>
+            <div><strong>欣賞影片</strong><small>影片將自動開始播放</small></div>
+          </li>
+        </ol>
+
+        <p class="tutorial-note">若影片沒有開始，請將板塊拿起後重新平放。</p>
+      </section>
+
+      <section class="stage" aria-label="影片播放區">
         <video
           id="mainVideo"
           playsinline
           muted
           loop
           preload="auto"
-          aria-label="目前節點影片"
+          aria-label="目前播放影片"
         ></video>
 
-        <div class="idle-state" id="idleState">
-          <div class="signal-mark" aria-hidden="true">
-            <i></i><i></i><i></i>
-          </div>
-          <p>等待 ESP32 觸發</p>
-          <span>感測器切換至節點 1、2 或 3 後，影片會自動播放</span>
+        <div class="idle-state">
+          <div class="tile-mark" aria-hidden="true"><i></i></div>
+          <p>請放置感應板塊</p>
+          <span>影片將自動播放</span>
         </div>
 
         <div class="stage-meta">
           <div>
-            <span class="stage-label">NOW PLAYING</span>
-            <strong id="nowPlaying">尚未選擇節點</strong>
+            <span>NOW PLAYING</span>
+            <strong id="nowPlaying">等待體驗</strong>
           </div>
-          <button type="button" class="sound-button" id="soundButton">
-            開啟聲音
-          </button>
-        </div>
-      </section>
-
-      <section class="placement-section" aria-labelledby="placementHeading">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">HOW TO PLACE</p>
-            <h2 id="placementHeading">如何放置感應板塊</h2>
-          </div>
-          <p>系統依 GPIO 34 讀到的電阻／ADC 值辨識板塊，不是依板塊放在感應區的左、中、右位置判斷。</p>
-        </div>
-
-        <div class="placement-steps">
-          <article class="placement-step">
-            <span class="step-number">1</span>
-            <div>
-              <strong>一次放一塊</strong>
-              <p>選擇已標示為 1、2 或 3 號的感應板塊，請勿同時疊放多塊。</p>
-            </div>
-          </article>
-          <article class="placement-step">
-            <span class="step-number">2</span>
-            <div>
-              <strong>平放並完全貼合</strong>
-              <p>把板塊平放在感應區，讓接點完整接觸，不要斜放或只壓到一角。</p>
-            </div>
-          </article>
-          <article class="placement-step">
-            <span class="step-number">3</span>
-            <div>
-              <strong>保持約 0.3 秒</strong>
-              <p>等對應節點亮起並播放影片後再放手；移開板塊會回到等待畫面。</p>
-            </div>
-          </article>
-        </div>
-
-        <div class="adc-map" aria-label="感應板塊 ADC 對照表">
-          <div class="adc-card adc-one">
-            <span>板塊 1</span>
-            <strong>ADC 200–999</strong>
-            <small>播放節點一</small>
-          </div>
-          <div class="adc-card adc-two">
-            <span>板塊 2</span>
-            <strong>ADC 1200–2199</strong>
-            <small>播放節點二</small>
-          </div>
-          <div class="adc-card adc-three">
-            <span>板塊 3</span>
-            <strong>ADC 2400–3399</strong>
-            <small>播放節點三</small>
-          </div>
-        </div>
-
-        <p class="placement-note">
-          若數值落在三個範圍以外，系統會視為「沒有辨識到板塊」。請重新放平、確認接點，或查看 ESP32 序列監控器中的 ADC 數值。
-        </p>
-      </section>
-
-      <section class="node-section" aria-labelledby="nodeHeading">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">VIDEO NODES</p>
-            <h2 id="nodeHeading">選擇 Demo 節點</h2>
-          </div>
-          <p>可先用下方按鈕測試；ESP32 訊號進來時會自動覆蓋。</p>
-        </div>
-
-        <div class="node-grid">
-          <button class="node-card" type="button" data-node="1">
-            <video src="assets/videos/node-1.mp4" muted playsinline preload="metadata"></video>
-            <span class="node-number">01</span>
-            <span class="node-copy">
-              <strong>節點一</strong>
-              <small>暖色脈衝</small>
-            </span>
-          </button>
-
-          <button class="node-card" type="button" data-node="2">
-            <video src="assets/videos/node-2.mp4" muted playsinline preload="metadata"></video>
-            <span class="node-number">02</span>
-            <span class="node-copy">
-              <strong>節點二</strong>
-              <small>藍色流動</small>
-            </span>
-          </button>
-
-          <button class="node-card" type="button" data-node="3">
-            <video src="assets/videos/node-3.mp4" muted playsinline preload="metadata"></video>
-            <span class="node-number">03</span>
-            <span class="node-copy">
-              <strong>節點三</strong>
-              <small>綠色波形</small>
-            </span>
-          </button>
         </div>
       </section>
     </main>
 
-    <noscript>此頁面需要 JavaScript 才能接收 ESP32 訊號。</noscript>
+    <noscript>此體驗需要啟用 JavaScript。</noscript>
     <script src="vendor/mqtt.min.js"></script>
     <script src="app.js"></script>
   </body>

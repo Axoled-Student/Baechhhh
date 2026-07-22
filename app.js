@@ -1,10 +1,12 @@
 const MQTT_URL = "wss://broker.hivemq.com:8884/mqtt";
 const CONTROL_TOPIC = "axoled-student/baechhhh/20260721/video/control/v1";
+const CACHE_REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 const videos = {
-  1: { src: "assets/videos/node-1.mp4", name: "節點一｜暖色脈衝" },
-  2: { src: "assets/videos/node-2.mp4", name: "節點二｜藍色流動" },
-  3: { src: "assets/videos/node-3.mp4", name: "節點三｜綠色波形" },
+  1: { src: "assets/videos/node-1.mp4", name: "影片一" },
+  2: { src: "assets/videos/node-2.mp4", name: "影片二" },
+  3: { src: "assets/videos/node-3.mp4", name: "影片三" },
 };
 
 const stage = document.querySelector(".stage");
@@ -12,17 +14,12 @@ const mainVideo = document.querySelector("#mainVideo");
 const nowPlaying = document.querySelector("#nowPlaying");
 const connection = document.querySelector(".connection");
 const connectionText = document.querySelector("#connectionText");
-const soundButton = document.querySelector("#soundButton");
-const nodeCards = [...document.querySelectorAll(".node-card")];
-const cacheButton = document.querySelector("#cacheButton");
-const cacheText = document.querySelector("#cacheText");
 
 let currentNode = 0;
 let idleTimer = null;
 
 function setConnection(state, label) {
   connection.classList.toggle("connected", state === "connected");
-  connection.classList.toggle("error", state === "error");
   connectionText.textContent = label;
 }
 
@@ -37,16 +34,10 @@ async function showNode(node) {
   stage.classList.add("has-video");
   nowPlaying.textContent = selected.name;
 
-  nodeCards.forEach((card) => {
-    const active = Number(card.dataset.node) === node;
-    card.classList.toggle("active", active);
-    card.setAttribute("aria-pressed", String(active));
-  });
-
   try {
     await mainVideo.play();
   } catch {
-    nowPlaying.textContent = `${selected.name}（點一下畫面播放）`;
+    nowPlaying.textContent = "影片準備中";
   }
 }
 
@@ -57,11 +48,7 @@ function showIdle() {
   mainVideo.removeAttribute("src");
   mainVideo.load();
   stage.classList.remove("has-video");
-  nowPlaying.textContent = "尚未選擇節點";
-  nodeCards.forEach((card) => {
-    card.classList.remove("active");
-    card.setAttribute("aria-pressed", "false");
-  });
+  nowPlaying.textContent = "等待體驗";
 }
 
 function handleControlMessage(rawMessage) {
@@ -80,25 +67,6 @@ function handleControlMessage(rawMessage) {
   }
 }
 
-nodeCards.forEach((card) => {
-  card.setAttribute("aria-pressed", "false");
-  card.addEventListener("click", () => showNode(Number(card.dataset.node)));
-});
-
-mainVideo.addEventListener("click", () => mainVideo.play());
-
-soundButton.addEventListener("click", () => {
-  mainVideo.muted = !mainVideo.muted;
-  soundButton.textContent = mainVideo.muted ? "開啟聲音" : "關閉聲音";
-});
-
-function setCacheStatus(state, label) {
-  cacheButton.classList.toggle("ready", state === "ready");
-  cacheButton.classList.toggle("error", state === "error");
-  cacheButton.disabled = state === "loading";
-  cacheText.textContent = label;
-}
-
 function askServiceWorker(worker, type) {
   return new Promise((resolve, reject) => {
     const channel = new MessageChannel();
@@ -114,13 +82,19 @@ function askServiceWorker(worker, type) {
   });
 }
 
-async function prepareVideoCache(forceRefresh = false) {
-  if (!("serviceWorker" in navigator)) {
-    setCacheStatus("error", "此瀏覽器不支援離線快取");
-    return;
-  }
+async function prepareBackgroundCache() {
+  if (!("serviceWorker" in navigator)) return;
 
-  setCacheStatus("loading", forceRefresh ? "正在重新下載影片…" : "正在快取三支影片…");
+  let hasController = Boolean(navigator.serviceWorker.controller);
+  let reloading = false;
+
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (hasController && !reloading) {
+      reloading = true;
+      window.location.reload();
+    }
+    hasController = true;
+  });
 
   try {
     const registration = await navigator.serviceWorker.register("./sw.js", {
@@ -128,28 +102,29 @@ async function prepareVideoCache(forceRefresh = false) {
       updateViaCache: "none",
     });
     await navigator.serviceWorker.ready;
+
     const worker = registration.active || navigator.serviceWorker.controller;
-    if (!worker) throw new Error("Service worker is not active");
+    if (!worker) return;
 
     const status = await askServiceWorker(worker, "VIDEO_CACHE_STATUS");
-    if (!forceRefresh && status.ready) {
-      setCacheStatus("ready", "三支影片已快取｜點此重新下載");
-      return;
-    }
+    if (!status.ready) await askServiceWorker(worker, "CACHE_VIDEOS");
 
-    await askServiceWorker(worker, forceRefresh ? "REFRESH_VIDEOS" : "CACHE_VIDEOS");
-    setCacheStatus("ready", "三支影片已快取｜點此重新下載");
+    const refreshVideos = () =>
+      askServiceWorker(worker, "REFRESH_VIDEOS").catch((error) =>
+        console.error("Background video refresh failed:", error),
+      );
+
+    window.setInterval(refreshVideos, CACHE_REFRESH_INTERVAL_MS);
+    window.setInterval(() => registration.update(), UPDATE_CHECK_INTERVAL_MS);
   } catch (error) {
-    console.error("Video cache error:", error);
-    setCacheStatus("error", "影片快取失敗｜點此重試");
+    console.error("Background cache setup failed:", error);
   }
 }
 
-cacheButton.addEventListener("click", () => prepareVideoCache(true));
-prepareVideoCache();
+prepareBackgroundCache();
 
 if (!window.mqtt) {
-  setConnection("error", "即時元件載入失敗");
+  setConnection("connecting", "系統連線中");
 } else {
   const randomId = crypto.randomUUID
     ? crypto.randomUUID().slice(0, 8)
@@ -164,15 +139,13 @@ if (!window.mqtt) {
   });
 
   client.on("connect", () => {
-    setConnection("connected", "已連線，等待 ESP32");
-    client.subscribe(CONTROL_TOPIC, { qos: 0 }, (error) => {
-      if (error) setConnection("error", "訂閱失敗，正在重試");
-    });
+    setConnection("connected", "系統就緒");
+    client.subscribe(CONTROL_TOPIC, { qos: 0 });
   });
 
-  client.on("reconnect", () => setConnection("connecting", "重新連線中…"));
-  client.on("offline", () => setConnection("error", "連線中斷，正在重試"));
-  client.on("error", () => setConnection("error", "即時連線發生錯誤"));
+  client.on("reconnect", () => setConnection("connecting", "系統連線中"));
+  client.on("offline", () => setConnection("connecting", "系統連線中"));
+  client.on("error", () => setConnection("connecting", "系統連線中"));
 
   client.on("message", (topic, payload) => {
     if (topic === CONTROL_TOPIC) handleControlMessage(payload.toString());

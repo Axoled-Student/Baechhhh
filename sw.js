@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "baechhhh-video-";
-const CACHE_NAME = `${CACHE_PREFIX}2026-07-22-v1`;
+const CACHE_NAME = `${CACHE_PREFIX}2026-07-22-v2`;
 
 const APP_SHELL = [
   "./",
@@ -47,7 +47,7 @@ self.addEventListener("install", (event) => {
     (async () => {
       const cache = await caches.open(CACHE_NAME);
       await cache.addAll(APP_SHELL);
-      await fetchAndCacheVideos(false);
+      await fetchAndCacheVideos(true);
       await self.skipWaiting();
     })(),
   );
