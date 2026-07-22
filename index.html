@@ -4,6 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#07111f" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Baechhhh｜ESP32 影片節點</title>
     <meta
       name="description"
@@ -18,9 +20,15 @@
           <p class="eyebrow">ESP32 LIVE VIDEO</p>
           <h1>三節點影片控制台</h1>
         </div>
-        <div class="connection" aria-live="polite">
-          <span class="status-dot" id="statusDot"></span>
-          <span id="connectionText">正在連線…</span>
+        <div class="status-group">
+          <div class="connection" aria-live="polite">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="connectionText">正在連線…</span>
+          </div>
+          <button class="cache-status" id="cacheButton" type="button">
+            <span class="cache-dot" aria-hidden="true"></span>
+            <span id="cacheText" aria-live="polite">影片快取準備中…</span>
+          </button>
         </div>
       </header>
 
@@ -51,6 +59,62 @@
             開啟聲音
           </button>
         </div>
+      </section>
+
+      <section class="placement-section" aria-labelledby="placementHeading">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">HOW TO PLACE</p>
+            <h2 id="placementHeading">如何放置感應板塊</h2>
+          </div>
+          <p>系統依 GPIO 34 讀到的電阻／ADC 值辨識板塊，不是依板塊放在感應區的左、中、右位置判斷。</p>
+        </div>
+
+        <div class="placement-steps">
+          <article class="placement-step">
+            <span class="step-number">1</span>
+            <div>
+              <strong>一次放一塊</strong>
+              <p>選擇已標示為 1、2 或 3 號的感應板塊，請勿同時疊放多塊。</p>
+            </div>
+          </article>
+          <article class="placement-step">
+            <span class="step-number">2</span>
+            <div>
+              <strong>平放並完全貼合</strong>
+              <p>把板塊平放在感應區，讓接點完整接觸，不要斜放或只壓到一角。</p>
+            </div>
+          </article>
+          <article class="placement-step">
+            <span class="step-number">3</span>
+            <div>
+              <strong>保持約 0.3 秒</strong>
+              <p>等對應節點亮起並播放影片後再放手；移開板塊會回到等待畫面。</p>
+            </div>
+          </article>
+        </div>
+
+        <div class="adc-map" aria-label="感應板塊 ADC 對照表">
+          <div class="adc-card adc-one">
+            <span>板塊 1</span>
+            <strong>ADC 200–999</strong>
+            <small>播放節點一</small>
+          </div>
+          <div class="adc-card adc-two">
+            <span>板塊 2</span>
+            <strong>ADC 1200–2199</strong>
+            <small>播放節點二</small>
+          </div>
+          <div class="adc-card adc-three">
+            <span>板塊 3</span>
+            <strong>ADC 2400–3399</strong>
+            <small>播放節點三</small>
+          </div>
+        </div>
+
+        <p class="placement-note">
+          若數值落在三個範圍以外，系統會視為「沒有辨識到板塊」。請重新放平、確認接點，或查看 ESP32 序列監控器中的 ADC 數值。
+        </p>
       </section>
 
       <section class="node-section" aria-labelledby="nodeHeading">

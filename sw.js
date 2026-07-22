@@ -1,0 +1,170 @@
+const CACHE_PREFIX = "baechhhh-video-";
+const CACHE_NAME = `${CACHE_PREFIX}2026-07-22-v1`;
+
+const APP_SHELL = [
+  "./",
+  "./index.html",
+  "./styles.css",
+  "./app.js",
+  "./vendor/mqtt.min.js",
+];
+
+const VIDEO_PATHS = [
+  "./assets/videos/node-1.mp4",
+  "./assets/videos/node-2.mp4",
+  "./assets/videos/node-3.mp4",
+];
+
+const absoluteUrl = (path) => new URL(path, self.registration.scope).href;
+
+async function fetchAndCacheVideos(forceRefresh = false) {
+  const cache = await caches.open(CACHE_NAME);
+
+  for (const path of VIDEO_PATHS) {
+    const url = absoluteUrl(path);
+    const response = await fetch(url, {
+      cache: forceRefresh ? "reload" : "default",
+    });
+
+    if (!response.ok) {
+      throw new Error(`Could not cache ${path}: HTTP ${response.status}`);
+    }
+
+    await cache.put(url, response);
+  }
+}
+
+async function videoCacheReady() {
+  const cache = await caches.open(CACHE_NAME);
+  const matches = await Promise.all(
+    VIDEO_PATHS.map((path) => cache.match(absoluteUrl(path))),
+  );
+  return matches.every(Boolean);
+}
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.addAll(APP_SHELL);
+      await fetchAndCacheVideos(false);
+      await self.skipWaiting();
+    })(),
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      const names = await caches.keys();
+      await Promise.all(
+        names
+          .filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
+          .map((name) => caches.delete(name)),
+      );
+      await self.clients.claim();
+    })(),
+  );
+});
+
+self.addEventListener("message", (event) => {
+  const reply = (message) => event.ports[0]?.postMessage(message);
+
+  if (event.data?.type === "VIDEO_CACHE_STATUS") {
+    event.waitUntil(
+      videoCacheReady()
+        .then((ready) => reply({ ok: true, ready }))
+        .catch((error) => reply({ ok: false, error: error.message })),
+    );
+  }
+
+  if (event.data?.type === "CACHE_VIDEOS" || event.data?.type === "REFRESH_VIDEOS") {
+    const forceRefresh = event.data.type === "REFRESH_VIDEOS";
+    event.waitUntil(
+      fetchAndCacheVideos(forceRefresh)
+        .then(() => reply({ ok: true, ready: true }))
+        .catch((error) => reply({ ok: false, error: error.message })),
+    );
+  }
+});
+
+function parseRange(rangeHeader, size) {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader || "");
+  if (!match) return null;
+
+  let start = match[1] === "" ? null : Number(match[1]);
+  let end = match[2] === "" ? null : Number(match[2]);
+
+  if (start === null && end !== null) {
+    start = Math.max(size - end, 0);
+    end = size - 1;
+  } else {
+    start ??= 0;
+    end ??= size - 1;
+  }
+
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || start >= size) {
+    return null;
+  }
+
+  return { start, end: Math.min(end, size - 1) };
+}
+
+async function getCompleteVideo(request) {
+  const cache = await caches.open(CACHE_NAME);
+  let response = await cache.match(request.url);
+
+  if (!response) {
+    const headers = new Headers(request.headers);
+    headers.delete("range");
+    response = await fetch(new Request(request.url, { headers, cache: "no-cache" }));
+    if (response.ok) await cache.put(request.url, response.clone());
+  }
+
+  return response;
+}
+
+async function serveVideo(request) {
+  const response = await getCompleteVideo(request);
+  if (!response || !response.ok || !request.headers.has("range")) return response;
+
+  const bytes = await response.arrayBuffer();
+  const range = parseRange(request.headers.get("range"), bytes.byteLength);
+
+  if (!range) {
+    return new Response(null, {
+      status: 416,
+      headers: { "Content-Range": `bytes */${bytes.byteLength}` },
+    });
+  }
+
+  const chunk = bytes.slice(range.start, range.end + 1);
+  return new Response(chunk, {
+    status: 206,
+    statusText: "Partial Content",
+    headers: {
+      "Accept-Ranges": "bytes",
+      "Content-Range": `bytes ${range.start}-${range.end}/${bytes.byteLength}`,
+      "Content-Length": String(chunk.byteLength),
+      "Content-Type": response.headers.get("Content-Type") || "video/mp4",
+    },
+  });
+}
+
+self.addEventListener("fetch", (event) => {
+  const request = event.request;
+  if (request.method !== "GET") return;
+
+  const requestUrl = new URL(request.url);
+  if (requestUrl.origin !== self.location.origin) return;
+
+  const isVideo = VIDEO_PATHS.some((path) => requestUrl.href === absoluteUrl(path));
+  if (isVideo) {
+    event.respondWith(serveVideo(request));
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then((cached) => cached || fetch(request)),
+  );
+});

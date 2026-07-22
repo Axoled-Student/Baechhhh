@@ -34,6 +34,8 @@ int readAveragedAdc() {
 }
 
 int puzzleFromAdc(int adcValue) {
+  // Each physical puzzle tile is identified by the ADC range it produces on
+  // GPIO 34. Values between these bands mean that no known tile is seated.
   if (adcValue >= 200 && adcValue < 1000) return 1;
   if (adcValue >= 1200 && adcValue < 2200) return 2;
   if (adcValue >= 2400 && adcValue < 3400) return 3;
