@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "mrxfr12a-1v74m2fyv1rxx",
+  "node": 3,
+  "original_name": "inbound4647270688422356943.mp4",
+  "content_type": "video/mp4",
+  "size": 428613,
+  "previous_video_sha": "89e164af5f3cc5a6d8aed81cf117194c37c66d97",
+  "requested_at": "2026-07-23T11:36:12.322Z",
+  "chunks": [
+    {
+      "sha": "8de09472984914e65db91fea46313e3f8981b174",
+      "size": 428613
+    }
+  ]
+}
