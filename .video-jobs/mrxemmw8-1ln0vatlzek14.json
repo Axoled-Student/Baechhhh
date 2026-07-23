@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "mrxemmw8-1ln0vatlzek14",
+  "node": 2,
+  "original_name": "juuzou.edit__reel_20251129011042.mp4",
+  "content_type": "video/mp4",
+  "size": 3877349,
+  "previous_video_sha": "553dd814f14f16ce5f3324b903655ee622df9994",
+  "requested_at": "2026-07-23T11:04:47.720Z",
+  "chunks": [
+    {
+      "sha": "183e473bd92ec7c508d7586723305857532abb0d",
+      "size": 3877349
+    }
+  ]
+}
