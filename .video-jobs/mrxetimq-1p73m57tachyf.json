@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "mrxetimq-1p73m57tachyf",
+  "node": 3,
+  "original_name": "未命名設計.mov",
+  "content_type": "video/quicktime",
+  "size": 5916014,
+  "previous_video_sha": "7cf20a88d50e2e75f38278b3acd2cdc750ada269",
+  "requested_at": "2026-07-23T11:10:08.786Z",
+  "chunks": [
+    {
+      "sha": "02d7429a14304416cd58b7d0fc03866cf60d626b",
+      "size": 5916014
+    }
+  ]
+}
